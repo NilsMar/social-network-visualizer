@@ -76,10 +76,10 @@ class ApiClient {
     return this.request('/network');
   }
 
-  async saveNetworkData(nodes, links) {
+  async saveNetworkData(nodes, links, customGroups = {}) {
     return this.request('/network', {
       method: 'PUT',
-      body: JSON.stringify({ nodes, links }),
+      body: JSON.stringify({ nodes, links, customGroups }),
     });
   }
 

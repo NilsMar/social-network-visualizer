@@ -1,6 +1,21 @@
-import { groupColors, groupLabels } from '../data/initialData';
+import { defaultGroupColors, defaultGroupLabels } from '../data/initialData';
 
-export function Legend({ nodes, selectedGroup, onGroupSelect }) {
+export function Legend({ nodes, selectedGroup, onGroupSelect, customGroups = {} }) {
+  // Merge default and custom groups
+  const allGroupLabels = {
+    ...defaultGroupLabels,
+    ...Object.fromEntries(
+      Object.entries(customGroups).map(([key, data]) => [key, data.label])
+    )
+  };
+  
+  const allGroupColors = {
+    ...defaultGroupColors,
+    ...Object.fromEntries(
+      Object.entries(customGroups).map(([key, data]) => [key, data.color])
+    )
+  };
+
   // Count nodes per group
   const groupCounts = nodes.reduce((acc, node) => {
     acc[node.group] = (acc[node.group] || 0) + 1;
@@ -8,7 +23,7 @@ export function Legend({ nodes, selectedGroup, onGroupSelect }) {
   }, {});
 
   // Order: me first, then by count descending
-  const orderedGroups = Object.entries(groupLabels)
+  const orderedGroups = Object.entries(allGroupLabels)
     .sort((a, b) => {
       if (a[0] === 'me') return -1;
       if (b[0] === 'me') return 1;
@@ -25,13 +40,13 @@ export function Legend({ nodes, selectedGroup, onGroupSelect }) {
             className={`legend-item ${key !== 'me' ? 'clickable' : ''} ${selectedGroup === key ? 'selected' : ''}`}
             onClick={() => key !== 'me' && onGroupSelect(key)}
             style={selectedGroup === key ? { 
-              backgroundColor: `${groupColors[key]}15`,
-              borderColor: groupColors[key]
+              backgroundColor: `${allGroupColors[key]}15`,
+              borderColor: allGroupColors[key]
             } : {}}
           >
             <span 
               className="legend-color"
-              style={{ backgroundColor: groupColors[key] }}
+              style={{ backgroundColor: allGroupColors[key] }}
             />
             <span className="legend-label">{label}</span>
             <span className="legend-count">{groupCounts[key] || 0}</span>

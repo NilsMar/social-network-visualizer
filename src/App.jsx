@@ -7,6 +7,8 @@ import { EditLinkForm } from './components/EditLinkForm';
 import { Legend } from './components/Legend';
 import { GroupPanel } from './components/GroupPanel';
 import { AuthPage } from './components/AuthPage';
+import { CategoryManager } from './components/CategoryManager';
+import { BulkAddForm } from './components/BulkAddForm';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { useNetworkData } from './hooks/useNetworkData';
 import './App.css';
@@ -17,6 +19,7 @@ function NetworkApp() {
   const {
     nodes,
     links,
+    customGroups,
     isLoaded,
     isSaving,
     lastSaved,
@@ -28,12 +31,19 @@ function NetworkApp() {
     deleteLink,
     getConnections,
     resetData,
+    addCategory,
+    updateCategory,
+    deleteCategory,
+    getAllGroups,
+    bulkAddPeople,
   } = useNetworkData(isAuthenticated);
 
   const [selectedNode, setSelectedNode] = useState(null);
   const [selectedGroup, setSelectedGroup] = useState(null);
   const [showAddPerson, setShowAddPerson] = useState(false);
   const [showAddLink, setShowAddLink] = useState(false);
+  const [showBulkAdd, setShowBulkAdd] = useState(false);
+  const [showCategoryManager, setShowCategoryManager] = useState(false);
   const [editingPerson, setEditingPerson] = useState(null);
   const [editingLink, setEditingLink] = useState(null);
   const [preselectedGroup, setPreselectedGroup] = useState(null);
@@ -62,12 +72,22 @@ function NetworkApp() {
     if (person.id) {
       updatePerson(person.id, person);
     } else {
-      addPerson(person);
+      // Add the new person
+      const newId = addPerson(person);
+      
+      // If connectToMe is true, create the link
+      if (person.connectToMe && newId) {
+        addLink({
+          source: 'me',
+          target: newId,
+          strength: person.connectionStrength || 5,
+        });
+      }
     }
     setShowAddPerson(false);
     setEditingPerson(null);
     setPreselectedGroup(null);
-  }, [addPerson, updatePerson]);
+  }, [addPerson, updatePerson, addLink]);
 
   const handleEditPerson = useCallback((person) => {
     setEditingPerson(person);
@@ -123,6 +143,13 @@ function NetworkApp() {
     setShowAddLink(true);
   }, []);
 
+  const handleBulkAdd = useCallback((data) => {
+    const count = bulkAddPeople(data);
+    setShowBulkAdd(false);
+    setPreselectedGroup(null);
+    alert(`Added ${count} ${count === 1 ? 'person' : 'people'} to your network!`);
+  }, [bulkAddPeople]);
+
   const handleLogout = useCallback(() => {
     if (window.confirm('Are you sure you want to sign out?')) {
       logout();
@@ -140,6 +167,7 @@ function NetworkApp() {
   }
 
   const connections = selectedNode ? getConnections(selectedNode.id) : [];
+  const allGroups = getAllGroups();
 
   const formatLastSaved = () => {
     if (!lastSaved) return null;
@@ -188,6 +216,21 @@ function NetworkApp() {
           <button 
             className="btn btn-secondary"
             onClick={() => {
+              setPreselectedGroup(null);
+              setShowBulkAdd(true);
+            }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+              <circle cx="9" cy="7" r="4" />
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+              <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+            </svg>
+            Bulk Add
+          </button>
+          <button 
+            className="btn btn-secondary"
+            onClick={() => {
               setPreselectedPerson(null);
               setShowAddLink(true);
             }}
@@ -197,6 +240,16 @@ function NetworkApp() {
               <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
             </svg>
             Add Link
+          </button>
+          <button 
+            className="btn btn-ghost"
+            onClick={() => setShowCategoryManager(true)}
+            title="Manage categories"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+            </svg>
           </button>
           <button 
             className="btn btn-ghost"
@@ -251,11 +304,13 @@ function NetworkApp() {
             links={links}
             selectedNode={selectedNode}
             onNodeSelect={handleNodeSelect}
+            customGroups={customGroups}
           />
           <Legend 
             nodes={nodes} 
             selectedGroup={selectedGroup}
             onGroupSelect={handleGroupSelect}
+            customGroups={customGroups}
           />
         </div>
 
@@ -270,6 +325,7 @@ function NetworkApp() {
             onDeletePerson={handleDeletePerson}
             onEditLink={handleEditLink}
             onAddLink={handleAddLinkFromPerson}
+            customGroups={customGroups}
           />
         )}
 
@@ -281,6 +337,7 @@ function NetworkApp() {
             onEdit={handleEditPerson}
             onDelete={handleDeletePerson}
             onEditLink={handleEditLink}
+            customGroups={customGroups}
           />
         )}
       </main>
@@ -295,6 +352,19 @@ function NetworkApp() {
           }}
           editPerson={editingPerson}
           preselectedGroup={preselectedGroup}
+          customGroups={customGroups}
+        />
+      )}
+
+      {showBulkAdd && (
+        <BulkAddForm
+          onSubmit={handleBulkAdd}
+          onCancel={() => {
+            setShowBulkAdd(false);
+            setPreselectedGroup(null);
+          }}
+          preselectedGroup={preselectedGroup}
+          customGroups={customGroups}
         />
       )}
 
@@ -319,6 +389,16 @@ function NetworkApp() {
           onSubmit={handleUpdateLink}
           onDelete={handleDeleteLink}
           onCancel={() => setEditingLink(null)}
+        />
+      )}
+
+      {showCategoryManager && (
+        <CategoryManager
+          customGroups={customGroups}
+          onAddCategory={addCategory}
+          onUpdateCategory={updateCategory}
+          onDeleteCategory={deleteCategory}
+          onClose={() => setShowCategoryManager(false)}
         />
       )}
 

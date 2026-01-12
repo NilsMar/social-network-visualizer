@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { apiClient } from '../api/client';
-import { initialNodes, initialLinks } from '../data/initialData';
+import { initialNodes, initialLinks, defaultGroupColors, defaultGroupLabels } from '../data/initialData';
 
 export function useNetworkData(isAuthenticated) {
   const [nodes, setNodes] = useState([]);
   const [links, setLinks] = useState([]);
+  const [customGroups, setCustomGroups] = useState({});
   const [isLoaded, setIsLoaded] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState(null);
@@ -22,6 +23,7 @@ export function useNetworkData(isAuthenticated) {
           const data = await apiClient.getNetworkData();
           setNodes(data.nodes || []);
           setLinks(data.links || []);
+          setCustomGroups(data.customGroups || {});
           if (data.updatedAt) {
             setLastSaved(new Date(data.updatedAt));
           }
@@ -30,22 +32,26 @@ export function useNetworkData(isAuthenticated) {
           // Fallback to initial data
           setNodes(initialNodes);
           setLinks(initialLinks);
+          setCustomGroups({});
         }
       } else {
         // Not authenticated - use localStorage for demo
         const savedData = localStorage.getItem('social-network-data');
         if (savedData) {
           try {
-            const { nodes: savedNodes, links: savedLinks } = JSON.parse(savedData);
+            const { nodes: savedNodes, links: savedLinks, customGroups: savedGroups } = JSON.parse(savedData);
             setNodes(savedNodes);
             setLinks(savedLinks);
+            setCustomGroups(savedGroups || {});
           } catch (e) {
             setNodes(initialNodes);
             setLinks(initialLinks);
+            setCustomGroups({});
           }
         } else {
           setNodes(initialNodes);
           setLinks(initialLinks);
+          setCustomGroups({});
         }
       }
       setIsLoaded(true);
@@ -55,19 +61,20 @@ export function useNetworkData(isAuthenticated) {
   }, [isAuthenticated]);
 
   // Auto-save with debounce when data changes
-  const saveToServer = useCallback(async (nodesToSave, linksToSave) => {
+  const saveToServer = useCallback(async (nodesToSave, linksToSave, groupsToSave) => {
     if (!isAuthenticated) {
       // Save to localStorage for non-authenticated users
       localStorage.setItem('social-network-data', JSON.stringify({ 
         nodes: nodesToSave, 
-        links: linksToSave 
+        links: linksToSave,
+        customGroups: groupsToSave
       }));
       return;
     }
 
     setIsSaving(true);
     try {
-      await apiClient.saveNetworkData(nodesToSave, linksToSave);
+      await apiClient.saveNetworkData(nodesToSave, linksToSave, groupsToSave);
       setLastSaved(new Date());
       pendingChangesRef.current = false;
     } catch (err) {
@@ -91,7 +98,7 @@ export function useNetworkData(isAuthenticated) {
 
     // Set new timeout for auto-save (1.5 seconds after last change)
     saveTimeoutRef.current = setTimeout(() => {
-      saveToServer(nodes, links);
+      saveToServer(nodes, links, customGroups);
     }, 1500);
 
     return () => {
@@ -99,15 +106,15 @@ export function useNetworkData(isAuthenticated) {
         clearTimeout(saveTimeoutRef.current);
       }
     };
-  }, [nodes, links, isLoaded, saveToServer]);
+  }, [nodes, links, customGroups, isLoaded, saveToServer]);
 
   // Force save (for immediate saves)
   const forceSave = useCallback(async () => {
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
     }
-    await saveToServer(nodes, links);
-  }, [nodes, links, saveToServer]);
+    await saveToServer(nodes, links, customGroups);
+  }, [nodes, links, customGroups, saveToServer]);
 
   // Add a new person
   const addPerson = useCallback((person) => {
@@ -221,6 +228,7 @@ export function useNetworkData(isAuthenticated) {
         const data = await apiClient.resetNetworkData();
         setNodes(data.nodes);
         setLinks(data.links);
+        setCustomGroups({});
         setLastSaved(new Date());
       } catch (err) {
         console.error('Failed to reset network data:', err);
@@ -228,16 +236,92 @@ export function useNetworkData(isAuthenticated) {
     } else {
       setNodes(initialNodes);
       setLinks(initialLinks);
+      setCustomGroups({});
       localStorage.setItem('social-network-data', JSON.stringify({ 
         nodes: initialNodes, 
-        links: initialLinks 
+        links: initialLinks,
+        customGroups: {}
       }));
     }
   }, [isAuthenticated]);
 
+  // Add a custom category
+  const addCategory = useCallback((key, categoryData) => {
+    setCustomGroups(prev => ({
+      ...prev,
+      [key]: categoryData
+    }));
+  }, []);
+
+  // Update a custom category
+  const updateCategory = useCallback((key, categoryData) => {
+    setCustomGroups(prev => ({
+      ...prev,
+      [key]: { ...prev[key], ...categoryData }
+    }));
+  }, []);
+
+  // Delete a custom category (moves people to 'friends')
+  const deleteCategory = useCallback((key) => {
+    // Move all people in this category to 'friends'
+    setNodes(prev => prev.map(node => 
+      node.group === key ? { ...node, group: 'friends' } : node
+    ));
+    // Remove the category
+    setCustomGroups(prev => {
+      const { [key]: removed, ...rest } = prev;
+      return rest;
+    });
+  }, []);
+
+  // Get all groups (default + custom)
+  const getAllGroups = useCallback(() => {
+    return {
+      me: { label: 'Me', color: defaultGroupColors.me },
+      family: { label: 'Family', color: defaultGroupColors.family },
+      work: { label: 'Work', color: defaultGroupColors.work },
+      friends: { label: 'Friends', color: defaultGroupColors.friends },
+      acquaintances: { label: 'Acquaintances', color: defaultGroupColors.acquaintances },
+      ...customGroups
+    };
+  }, [customGroups]);
+
+  // Bulk add people
+  const bulkAddPeople = useCallback((peopleData) => {
+    const { names, group, connectToMe, connectionStrength } = peopleData;
+    const newNodes = [];
+    const newLinks = [];
+
+    names.forEach(name => {
+      const id = `person-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      newNodes.push({
+        id,
+        name,
+        group,
+        details: '',
+      });
+
+      if (connectToMe) {
+        newLinks.push({
+          source: 'me',
+          target: id,
+          strength: connectionStrength || 5,
+        });
+      }
+    });
+
+    setNodes(prev => [...prev, ...newNodes]);
+    if (newLinks.length > 0) {
+      setLinks(prev => [...prev, ...newLinks]);
+    }
+
+    return newNodes.length;
+  }, []);
+
   return {
     nodes,
     links,
+    customGroups,
     isLoaded,
     isSaving,
     lastSaved,
@@ -251,5 +335,10 @@ export function useNetworkData(isAuthenticated) {
     getConnections,
     resetData,
     forceSave,
+    addCategory,
+    updateCategory,
+    deleteCategory,
+    getAllGroups,
+    bulkAddPeople,
   };
 }

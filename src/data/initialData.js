@@ -69,8 +69,8 @@ export const initialLinks = [
   { source: 'bestfriend', target: 'sister', strength: 4 }, // Best friend met sister
 ];
 
-// Muted, sophisticated color palette
-export const groupColors = {
+// Muted, sophisticated color palette - default groups
+export const defaultGroupColors = {
   me: '#e07a3a',        // Muted warm orange
   family: '#c9577a',    // Dusty rose
   work: '#3a9ba5',      // Muted teal
@@ -78,10 +78,31 @@ export const groupColors = {
   acquaintances: '#7a8694', // Cool slate
 };
 
-export const groupLabels = {
+export const defaultGroupLabels = {
   me: 'Me',
   family: 'Family',
   work: 'Work',
   friends: 'Friends',
   acquaintances: 'Acquaintances',
 };
+
+// Available colors for new categories
+export const availableColors = [
+  '#e07a3a', // Warm orange
+  '#c9577a', // Dusty rose
+  '#3a9ba5', // Muted teal
+  '#7c6bb8', // Muted violet
+  '#7a8694', // Cool slate
+  '#5a9a6b', // Forest green
+  '#d4a656', // Goldenrod
+  '#8b5a8b', // Plum
+  '#5a8b8b', // Dark cyan
+  '#cd6839', // Terracotta
+  '#708090', // Slate gray
+  '#9370db', // Medium purple
+];
+
+// For backwards compatibility, export groupColors and groupLabels as defaults
+// These will be overridden by user's custom groups stored in the database
+export const groupColors = { ...defaultGroupColors };
+export const groupLabels = { ...defaultGroupLabels };

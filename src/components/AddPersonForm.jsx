@@ -1,24 +1,44 @@
 import { useState, useEffect } from 'react';
-import { groupColors, groupLabels } from '../data/initialData';
 
-export function AddPersonForm({ onSubmit, onCancel, editPerson = null, preselectedGroup = null }) {
+export function AddPersonForm({ 
+  onSubmit, 
+  onCancel, 
+  editPerson = null, 
+  preselectedGroup = null,
+  customGroups = {},
+  defaultStrength = 5
+}) {
   const [name, setName] = useState('');
   const [group, setGroup] = useState(preselectedGroup || 'friends');
   const [details, setDetails] = useState('');
+  const [connectToMe, setConnectToMe] = useState(true);
+  const [connectionStrength, setConnectionStrength] = useState(defaultStrength);
 
   const isEditing = !!editPerson;
+
+  // Merge default and custom groups
+  const allGroups = {
+    family: { label: 'Family', color: '#c9577a' },
+    work: { label: 'Work', color: '#3a9ba5' },
+    friends: { label: 'Friends', color: '#7c6bb8' },
+    acquaintances: { label: 'Acquaintances', color: '#7a8694' },
+    ...customGroups,
+  };
 
   useEffect(() => {
     if (editPerson) {
       setName(editPerson.name);
       setGroup(editPerson.group);
       setDetails(editPerson.details || '');
+      setConnectToMe(false); // Don't show connect option when editing
     } else {
       setName('');
       setGroup(preselectedGroup || 'friends');
       setDetails('');
+      setConnectToMe(true);
+      setConnectionStrength(defaultStrength);
     }
-  }, [editPerson, preselectedGroup]);
+  }, [editPerson, preselectedGroup, defaultStrength]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -29,15 +49,19 @@ export function AddPersonForm({ onSubmit, onCancel, editPerson = null, preselect
       name: name.trim(),
       group,
       details: details.trim(),
+      connectToMe: !isEditing && connectToMe,
+      connectionStrength: connectToMe ? connectionStrength : null,
     });
 
     // Reset form
     setName('');
     setGroup(preselectedGroup || 'friends');
     setDetails('');
+    setConnectToMe(true);
+    setConnectionStrength(defaultStrength);
   };
 
-  const availableGroups = Object.entries(groupLabels).filter(([key]) => key !== 'me');
+  const availableGroups = Object.entries(allGroups).filter(([key]) => key !== 'me');
 
   return (
     <div className="form-overlay">
@@ -61,22 +85,22 @@ export function AddPersonForm({ onSubmit, onCancel, editPerson = null, preselect
           <div className="form-group">
             <label htmlFor="group">Group</label>
             <div className="group-selector">
-              {availableGroups.map(([key, label]) => (
+              {availableGroups.map(([key, groupData]) => (
                 <button
                   key={key}
                   type="button"
                   className={`group-option ${group === key ? 'selected' : ''}`}
                   style={{
-                    borderColor: group === key ? groupColors[key] : 'transparent',
-                    backgroundColor: group === key ? `${groupColors[key]}15` : 'transparent',
+                    borderColor: group === key ? groupData.color : 'transparent',
+                    backgroundColor: group === key ? `${groupData.color}15` : 'transparent',
                   }}
                   onClick={() => setGroup(key)}
                 >
                   <span 
                     className="group-dot"
-                    style={{ backgroundColor: groupColors[key] }}
+                    style={{ backgroundColor: groupData.color }}
                   />
-                  {label}
+                  {groupData.label}
                 </button>
               ))}
             </div>
@@ -92,6 +116,36 @@ export function AddPersonForm({ onSubmit, onCancel, editPerson = null, preselect
               rows={3}
             />
           </div>
+
+          {!isEditing && (
+            <div className="form-group">
+              <label className="checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={connectToMe}
+                  onChange={(e) => setConnectToMe(e.target.checked)}
+                />
+                <span className="checkbox-text">Connect this person to me</span>
+              </label>
+              
+              {connectToMe && (
+                <div className="strength-slider">
+                  <label>Connection strength: <strong>{connectionStrength}</strong></label>
+                  <input
+                    type="range"
+                    min="1"
+                    max="10"
+                    value={connectionStrength}
+                    onChange={(e) => setConnectionStrength(parseInt(e.target.value))}
+                  />
+                  <div className="strength-labels">
+                    <span>Weak</span>
+                    <span>Strong</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="form-actions">
             <button type="button" className="btn btn-secondary" onClick={onCancel}>

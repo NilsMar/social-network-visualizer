@@ -1,8 +1,15 @@
 import { useEffect, useRef, useCallback, useMemo } from 'react';
 import * as d3 from 'd3';
-import { groupColors } from '../data/initialData';
+import { defaultGroupColors } from '../data/initialData';
 
-export function NetworkGraph({ nodes, links, selectedNode, onNodeSelect }) {
+export function NetworkGraph({ nodes, links, selectedNode, onNodeSelect, customGroups = {} }) {
+  // Merge default and custom group colors
+  const groupColors = useMemo(() => ({
+    ...defaultGroupColors,
+    ...Object.fromEntries(
+      Object.entries(customGroups).map(([key, data]) => [key, data.color])
+    )
+  }), [customGroups]);
   const svgRef = useRef(null);
   const simulationRef = useRef(null);
   const containerRef = useRef(null);
@@ -71,14 +78,27 @@ export function NetworkGraph({ nodes, links, selectedNode, onNodeSelect }) {
       acquaintances: { x: 0, y: 180 },
     };
     
-    const offset = groupOffsets[node.group] || { x: 0, y: 0 };
+    // For custom groups, spread them around
+    let offset = groupOffsets[node.group];
+    if (!offset) {
+      // Generate a position based on hash of group name for consistency
+      const customGroupKeys = Object.keys(customGroups);
+      const idx = customGroupKeys.indexOf(node.group);
+      const angle = (idx + 1) * (Math.PI / 3); // Spread around in 60-degree increments
+      const radius = 160;
+      offset = {
+        x: Math.cos(angle) * radius,
+        y: Math.sin(angle) * radius,
+      };
+    }
+    
     const randomOffset = 50; // Add some randomness so nodes don't stack
     
     return {
       x: width / 2 + offset.x + (Math.random() - 0.5) * randomOffset,
       y: height / 2 + offset.y + (Math.random() - 0.5) * randomOffset,
     };
-  }, []);
+  }, [customGroups]);
 
   useEffect(() => {
     if (!nodes.length || !svgRef.current) return;

@@ -3,7 +3,7 @@ import express from 'express';
 import cors from 'cors';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import pg from 'pg';
+import { createClient } from '@supabase/supabase-js';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { existsSync } from 'fs';
@@ -15,22 +15,17 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 
-// Database connection
-const isProduction = process.env.NODE_ENV === 'production';
-const connectionString = process.env.DATABASE_URL;
+// Supabase client setup
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY;
 
-let pool;
+let supabase;
 
-if (connectionString) {
-  // Use Supabase/PostgreSQL in production
-  pool = new pg.Pool({
-    connectionString,
-    ssl: isProduction ? { rejectUnauthorized: false } : false,
-  });
+if (supabaseUrl && supabaseServiceKey) {
+  supabase = createClient(supabaseUrl, supabaseServiceKey);
+  console.log('✅ Supabase client initialized');
 } else {
-  // Fallback for local development without Supabase
-  console.log('⚠️  No DATABASE_URL found. Using in-memory storage for development.');
-  console.log('   Set DATABASE_URL to connect to Supabase.');
+  console.log('⚠️  SUPABASE_URL or SUPABASE_SERVICE_KEY not found. Using in-memory storage.');
 }
 
 // In-memory fallback for development without database
@@ -40,34 +35,6 @@ let memoryStore = {
   nextUserId: 1,
   nextNetworkId: 1,
 };
-
-// Initialize database tables
-async function initDatabase() {
-  if (!pool) return;
-  
-  try {
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS users (
-        id SERIAL PRIMARY KEY,
-        email TEXT UNIQUE NOT NULL,
-        password TEXT NOT NULL,
-        name TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-
-      CREATE TABLE IF NOT EXISTS network_data (
-        id SERIAL PRIMARY KEY,
-        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        nodes JSONB NOT NULL DEFAULT '[]',
-        links JSONB NOT NULL DEFAULT '[]',
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
-    console.log('✅ Database tables initialized');
-  } catch (error) {
-    console.error('Failed to initialize database:', error);
-  }
-}
 
 // Default network data for new users
 const defaultNodes = [
@@ -102,17 +69,33 @@ const authenticateToken = (req, res, next) => {
 
 // Database helper functions
 async function findUserByEmail(email) {
-  if (pool) {
-    const result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
-    return result.rows[0];
+  if (supabase) {
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('email', email)
+      .single();
+    
+    if (error && error.code !== 'PGRST116') {
+      console.error('Error finding user:', error);
+    }
+    return data;
   }
   return memoryStore.users.find(u => u.email === email);
 }
 
 async function findUserById(id) {
-  if (pool) {
-    const result = await pool.query('SELECT id, email, name, created_at FROM users WHERE id = $1', [id]);
-    return result.rows[0];
+  if (supabase) {
+    const { data, error } = await supabase
+      .from('users')
+      .select('id, email, name, created_at')
+      .eq('id', id)
+      .single();
+    
+    if (error && error.code !== 'PGRST116') {
+      console.error('Error finding user by id:', error);
+    }
+    return data;
   }
   const user = memoryStore.users.find(u => u.id === id);
   if (user) {
@@ -123,12 +106,18 @@ async function findUserById(id) {
 }
 
 async function createUser(email, hashedPassword, name) {
-  if (pool) {
-    const result = await pool.query(
-      'INSERT INTO users (email, password, name) VALUES ($1, $2, $3) RETURNING id, email, name',
-      [email, hashedPassword, name]
-    );
-    return result.rows[0];
+  if (supabase) {
+    const { data, error } = await supabase
+      .from('users')
+      .insert({ email, password: hashedPassword, name })
+      .select('id, email, name')
+      .single();
+    
+    if (error) {
+      console.error('Error creating user:', error);
+      throw new Error(error.message);
+    }
+    return data;
   }
   const newUser = {
     id: memoryStore.nextUserId++,
@@ -142,29 +131,48 @@ async function createUser(email, hashedPassword, name) {
 }
 
 async function getNetworkData(userId) {
-  if (pool) {
-    const result = await pool.query(
-      'SELECT nodes, links, updated_at FROM network_data WHERE user_id = $1',
-      [userId]
-    );
-    return result.rows[0];
+  if (supabase) {
+    const { data, error } = await supabase
+      .from('network_data')
+      .select('nodes, links, updated_at')
+      .eq('user_id', userId)
+      .single();
+    
+    if (error && error.code !== 'PGRST116') {
+      console.error('Error getting network data:', error);
+    }
+    return data;
   }
   return memoryStore.networkData.find(n => n.user_id === userId);
 }
 
 async function saveNetworkData(userId, nodes, links) {
-  if (pool) {
-    const existing = await pool.query('SELECT id FROM network_data WHERE user_id = $1', [userId]);
-    if (existing.rows.length > 0) {
-      await pool.query(
-        'UPDATE network_data SET nodes = $1, links = $2, updated_at = CURRENT_TIMESTAMP WHERE user_id = $3',
-        [JSON.stringify(nodes), JSON.stringify(links), userId]
-      );
+  if (supabase) {
+    const { data: existing } = await supabase
+      .from('network_data')
+      .select('id')
+      .eq('user_id', userId)
+      .single();
+    
+    if (existing) {
+      const { error } = await supabase
+        .from('network_data')
+        .update({ nodes, links, updated_at: new Date().toISOString() })
+        .eq('user_id', userId);
+      
+      if (error) {
+        console.error('Error updating network data:', error);
+        throw new Error(error.message);
+      }
     } else {
-      await pool.query(
-        'INSERT INTO network_data (user_id, nodes, links) VALUES ($1, $2, $3)',
-        [userId, JSON.stringify(nodes), JSON.stringify(links)]
-      );
+      const { error } = await supabase
+        .from('network_data')
+        .insert({ user_id: userId, nodes, links });
+      
+      if (error) {
+        console.error('Error inserting network data:', error);
+        throw new Error(error.message);
+      }
     }
   } else {
     const existing = memoryStore.networkData.find(n => n.user_id === userId);
@@ -188,7 +196,7 @@ async function saveNetworkData(userId, nodes, links) {
 
 // Health check
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', database: pool ? 'connected' : 'in-memory' });
+  res.json({ status: 'ok', database: supabase ? 'supabase' : 'in-memory' });
 });
 
 // Register
@@ -204,24 +212,18 @@ app.post('/api/auth/register', async (req, res) => {
       return res.status(400).json({ error: 'Password must be at least 6 characters' });
     }
 
-    // Check if user exists
     const existingUser = await findUserByEmail(email);
     if (existingUser) {
       return res.status(400).json({ error: 'Email already registered' });
     }
 
-    // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
-
-    // Create user
     const user = await createUser(email, hashedPassword, name || email.split('@')[0]);
 
-    // Create default network data for new user
     const defaultNodesWithName = [...defaultNodes];
     defaultNodesWithName[0] = { ...defaultNodesWithName[0], name: name || 'Me' };
     await saveNetworkData(user.id, defaultNodesWithName, defaultLinks);
 
-    // Generate token
     const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: '7d' });
 
     res.status(201).json({
@@ -244,19 +246,16 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(400).json({ error: 'Email and password are required' });
     }
 
-    // Find user
     const user = await findUserByEmail(email);
     if (!user) {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
-    // Check password
     const validPassword = await bcrypt.compare(password, user.password);
     if (!validPassword) {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
-    // Generate token
     const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: '7d' });
 
     res.json({
@@ -289,15 +288,14 @@ app.get('/api/network', authenticateToken, async (req, res) => {
     const data = await getNetworkData(req.user.id);
     
     if (!data) {
-      // Create default data if none exists
       const defaultNodesWithName = [...defaultNodes];
       await saveNetworkData(req.user.id, defaultNodesWithName, defaultLinks);
       return res.json({ nodes: defaultNodesWithName, links: defaultLinks });
     }
 
     res.json({
-      nodes: typeof data.nodes === 'string' ? JSON.parse(data.nodes) : data.nodes,
-      links: typeof data.links === 'string' ? JSON.parse(data.links) : data.links,
+      nodes: data.nodes,
+      links: data.links,
       updatedAt: data.updated_at
     });
   } catch (error) {
@@ -348,7 +346,6 @@ const distPath = join(__dirname, '..', 'dist');
 if (existsSync(distPath)) {
   app.use(express.static(distPath));
   
-  // Handle client-side routing - serve index.html for all non-API routes
   app.get('*', (req, res, next) => {
     if (req.path.startsWith('/api')) {
       return next();
@@ -358,14 +355,12 @@ if (existsSync(distPath)) {
   console.log('📁 Serving static files from dist/');
 }
 
-// Initialize and start server
-initDatabase().then(() => {
-  app.listen(PORT, () => {
-    console.log(`🚀 Server running on http://localhost:${PORT}`);
-    if (pool) {
-      console.log('📦 Connected to PostgreSQL database');
-    } else {
-      console.log('💾 Using in-memory storage (no DATABASE_URL)');
-    }
-  });
+// Start server
+app.listen(PORT, () => {
+  console.log(`🚀 Server running on http://localhost:${PORT}`);
+  if (supabase) {
+    console.log('📦 Connected to Supabase');
+  } else {
+    console.log('💾 Using in-memory storage');
+  }
 });

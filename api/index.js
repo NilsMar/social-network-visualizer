@@ -29,10 +29,13 @@ let memoryStore = {
 };
 
 // Initialize database tables
+let dbInitialized = false;
+
 async function initDatabase() {
-  if (!pool) return;
+  if (!pool || dbInitialized) return;
   
   try {
+    // Create tables separately to avoid issues
     await pool.query(`
       CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
@@ -40,23 +43,26 @@ async function initDatabase() {
         password TEXT NOT NULL,
         name TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-
+      )
+    `);
+    
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS network_data (
         id SERIAL PRIMARY KEY,
         user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         nodes JSONB NOT NULL DEFAULT '[]',
         links JSONB NOT NULL DEFAULT '[]',
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
+      )
     `);
+    
+    dbInitialized = true;
+    console.log('Database tables initialized successfully');
   } catch (error) {
-    console.error('Failed to initialize database:', error);
+    console.error('Failed to initialize database:', error.message);
+    // Don't throw - let individual queries handle errors
   }
 }
-
-// Initialize on cold start
-initDatabase();
 
 // Default network data for new users
 const defaultNodes = [
@@ -183,6 +189,9 @@ app.get('/api/health', (req, res) => {
 // Register
 app.post('/api/auth/register', async (req, res) => {
   try {
+    // Ensure database is initialized
+    await initDatabase();
+    
     const { email, password, name } = req.body;
 
     if (!email || !password) {
@@ -213,14 +222,17 @@ app.post('/api/auth/register', async (req, res) => {
       user: { id: user.id, email: user.email, name: user.name }
     });
   } catch (error) {
-    console.error('Registration error:', error);
-    res.status(500).json({ error: 'Server error during registration' });
+    console.error('Registration error:', error.message, error.stack);
+    res.status(500).json({ error: 'Server error during registration', details: error.message });
   }
 });
 
 // Login
 app.post('/api/auth/login', async (req, res) => {
   try {
+    // Ensure database is initialized
+    await initDatabase();
+    
     const { email, password } = req.body;
 
     if (!email || !password) {

@@ -1473,7 +1473,7 @@ body {
 }
 
 /* Checkbox styles */
-.checkbox-label {
+.form-group label.checkbox-label {
   display: flex;
   align-items: center;
   gap: 0.75rem;

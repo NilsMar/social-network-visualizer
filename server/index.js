@@ -313,13 +313,13 @@ app.get('/api/network', authenticateToken, async (req, res) => {
 // Save network data
 app.put('/api/network', authenticateToken, async (req, res) => {
   try {
-    const { nodes, links, customGroups = {} } = req.body;
+    const { nodes, links, customGroups = {}, defaultColorOverrides = {} } = req.body;
 
     if (!nodes || !links) {
       return res.status(400).json({ error: 'Nodes and links are required' });
     }
 
-    await saveNetworkData(req.user.id, nodes, links, customGroups);
+    await saveNetworkData(req.user.id, nodes, links, customGroups, defaultColorOverrides);
     res.json({ message: 'Network data saved successfully' });
   } catch (error) {
     console.error('Save network error:', error);
@@ -334,7 +334,7 @@ app.post('/api/network/reset', authenticateToken, async (req, res) => {
     const defaultNodesWithName = [...defaultNodes];
     defaultNodesWithName[0] = { ...defaultNodesWithName[0], name: user?.name || 'Me' };
 
-    await saveNetworkData(req.user.id, defaultNodesWithName, defaultLinks, {});
+    await saveNetworkData(req.user.id, defaultNodesWithName, defaultLinks, {}, {});
 
     res.json({ 
       message: 'Network data reset successfully',

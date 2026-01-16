@@ -20,6 +20,7 @@ function NetworkApp() {
     nodes,
     links,
     customGroups,
+    defaultColorOverrides,
     isLoaded,
     isSaving,
     lastSaved,
@@ -34,6 +35,7 @@ function NetworkApp() {
     addCategory,
     updateCategory,
     deleteCategory,
+    updateDefaultColor,
     getAllGroups,
     bulkAddPeople,
   } = useNetworkData(isAuthenticated);
@@ -314,12 +316,14 @@ function NetworkApp() {
             selectedNode={selectedNode}
             onNodeSelect={handleNodeSelect}
             customGroups={customGroups}
+            defaultColorOverrides={defaultColorOverrides}
           />
           <Legend 
             nodes={nodes} 
             selectedGroup={selectedGroup}
             onGroupSelect={handleGroupSelect}
             customGroups={customGroups}
+            defaultColorOverrides={defaultColorOverrides}
           />
         </div>
 
@@ -408,6 +412,8 @@ function NetworkApp() {
           onAddCategory={addCategory}
           onUpdateCategory={updateCategory}
           onDeleteCategory={deleteCategory}
+          onUpdateDefaultColor={updateDefaultColor}
+          defaultColorOverrides={defaultColorOverrides}
           onClose={() => setShowCategoryManager(false)}
         />
       )}

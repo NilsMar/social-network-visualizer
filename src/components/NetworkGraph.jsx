@@ -2,14 +2,15 @@ import { useEffect, useRef, useCallback, useMemo, useImperativeHandle, forwardRe
 import * as d3 from 'd3';
 import { defaultGroupColors } from '../data/initialData';
 
-export const NetworkGraph = forwardRef(function NetworkGraph({ nodes, links, selectedNode, onNodeSelect, customGroups = {} }, ref) {
+export const NetworkGraph = forwardRef(function NetworkGraph({ nodes, links, selectedNode, onNodeSelect, customGroups = {}, defaultColorOverrides = {} }, ref) {
   // Merge default and custom group colors
   const groupColors = useMemo(() => ({
     ...defaultGroupColors,
+    ...defaultColorOverrides,
     ...Object.fromEntries(
       Object.entries(customGroups).map(([key, data]) => [key, data.color])
     )
-  }), [customGroups]);
+  }), [customGroups, defaultColorOverrides]);
   const svgRef = useRef(null);
   const simulationRef = useRef(null);
   const containerRef = useRef(null);

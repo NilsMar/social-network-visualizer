@@ -30,12 +30,31 @@ class ApiClient {
       headers['Authorization'] = `Bearer ${this.token}`;
     }
 
-    const response = await fetch(`${API_BASE}${endpoint}`, {
-      ...options,
-      headers,
-    });
+    let response;
+    try {
+      response = await fetch(`${API_BASE}${endpoint}`, {
+        ...options,
+        headers,
+      });
+    } catch (err) {
+      throw new Error('Unable to connect to server. Please check if the server is running.');
+    }
 
-    const data = await response.json();
+    // Handle empty responses
+    const text = await response.text();
+    if (!text) {
+      if (!response.ok) {
+        throw new Error(`Request failed with status ${response.status}`);
+      }
+      return {};
+    }
+
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch (err) {
+      throw new Error('Invalid response from server');
+    }
 
     if (!response.ok) {
       throw new Error(data.error || 'Request failed');
@@ -76,10 +95,10 @@ class ApiClient {
     return this.request('/network');
   }
 
-  async saveNetworkData(nodes, links, customGroups = {}) {
+  async saveNetworkData(nodes, links, customGroups = {}, defaultColorOverrides = {}) {
     return this.request('/network', {
       method: 'PUT',
-      body: JSON.stringify({ nodes, links, customGroups }),
+      body: JSON.stringify({ nodes, links, customGroups, defaultColorOverrides }),
     });
   }
 

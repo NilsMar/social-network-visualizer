@@ -127,7 +127,7 @@ async function getNetworkData(userId) {
   if (supabase) {
     const { data, error } = await supabase
       .from('network_data')
-      .select('nodes, links, custom_groups, updated_at')
+      .select('nodes, links, custom_groups, default_color_overrides, updated_at')
       .eq('user_id', userId)
       .single();
     
@@ -139,7 +139,7 @@ async function getNetworkData(userId) {
   return memoryStore.networkData.find(n => n.user_id === userId);
 }
 
-async function saveNetworkData(userId, nodes, links, customGroups = {}) {
+async function saveNetworkData(userId, nodes, links, customGroups = {}, defaultColorOverrides = {}) {
   if (supabase) {
     // Check if record exists
     const { data: existing } = await supabase
@@ -151,7 +151,7 @@ async function saveNetworkData(userId, nodes, links, customGroups = {}) {
     if (existing) {
       const { error } = await supabase
         .from('network_data')
-        .update({ nodes, links, custom_groups: customGroups, updated_at: new Date().toISOString() })
+        .update({ nodes, links, custom_groups: customGroups, default_color_overrides: defaultColorOverrides, updated_at: new Date().toISOString() })
         .eq('user_id', userId);
       
       if (error) {
@@ -161,7 +161,7 @@ async function saveNetworkData(userId, nodes, links, customGroups = {}) {
     } else {
       const { error } = await supabase
         .from('network_data')
-        .insert({ user_id: userId, nodes, links, custom_groups: customGroups });
+        .insert({ user_id: userId, nodes, links, custom_groups: customGroups, default_color_overrides: defaultColorOverrides });
       
       if (error) {
         console.error('Error inserting network data:', error);
@@ -174,6 +174,7 @@ async function saveNetworkData(userId, nodes, links, customGroups = {}) {
       existing.nodes = nodes;
       existing.links = links;
       existing.custom_groups = customGroups;
+      existing.default_color_overrides = defaultColorOverrides;
       existing.updated_at = new Date().toISOString();
     } else {
       memoryStore.networkData.push({
@@ -182,6 +183,7 @@ async function saveNetworkData(userId, nodes, links, customGroups = {}) {
         nodes,
         links,
         custom_groups: customGroups,
+        default_color_overrides: defaultColorOverrides,
         updated_at: new Date().toISOString(),
       });
     }
@@ -285,14 +287,15 @@ app.get('/api/network', authenticateToken, async (req, res) => {
     
     if (!data) {
       const defaultNodesWithName = [...defaultNodes];
-      await saveNetworkData(req.user.id, defaultNodesWithName, defaultLinks, {});
-      return res.json({ nodes: defaultNodesWithName, links: defaultLinks, customGroups: {} });
+      await saveNetworkData(req.user.id, defaultNodesWithName, defaultLinks, {}, {});
+      return res.json({ nodes: defaultNodesWithName, links: defaultLinks, customGroups: {}, defaultColorOverrides: {} });
     }
 
     res.json({
       nodes: data.nodes,
       links: data.links,
       customGroups: data.custom_groups || {},
+      defaultColorOverrides: data.default_color_overrides || {},
       updatedAt: data.updated_at
     });
   } catch (error) {
@@ -304,13 +307,13 @@ app.get('/api/network', authenticateToken, async (req, res) => {
 // Save network data
 app.put('/api/network', authenticateToken, async (req, res) => {
   try {
-    const { nodes, links, customGroups = {} } = req.body;
+    const { nodes, links, customGroups = {}, defaultColorOverrides = {} } = req.body;
 
     if (!nodes || !links) {
       return res.status(400).json({ error: 'Nodes and links are required' });
     }
 
-    await saveNetworkData(req.user.id, nodes, links, customGroups);
+    await saveNetworkData(req.user.id, nodes, links, customGroups, defaultColorOverrides);
     res.json({ message: 'Network data saved successfully' });
   } catch (error) {
     console.error('Save network error:', error.message);
@@ -325,7 +328,7 @@ app.post('/api/network/reset', authenticateToken, async (req, res) => {
     const defaultNodesWithName = [...defaultNodes];
     defaultNodesWithName[0] = { ...defaultNodesWithName[0], name: user?.name || 'Me' };
 
-    await saveNetworkData(req.user.id, defaultNodesWithName, defaultLinks);
+    await saveNetworkData(req.user.id, defaultNodesWithName, defaultLinks, {}, {});
 
     res.json({ 
       message: 'Network data reset successfully',

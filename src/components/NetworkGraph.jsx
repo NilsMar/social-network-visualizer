@@ -1,8 +1,8 @@
-import { useEffect, useRef, useCallback, useMemo } from 'react';
+import { useEffect, useRef, useCallback, useMemo, useImperativeHandle, forwardRef } from 'react';
 import * as d3 from 'd3';
 import { defaultGroupColors } from '../data/initialData';
 
-export function NetworkGraph({ nodes, links, selectedNode, onNodeSelect, customGroups = {}, defaultColorOverrides = {}, centeredNodeId = 'me' }) {
+export const NetworkGraph = forwardRef(function NetworkGraph({ nodes, links, selectedNode, onNodeSelect, customGroups = {}, defaultColorOverrides = {} }, ref) {
   // Merge default and custom group colors
   const groupColors = useMemo(() => ({
     ...defaultGroupColors,
@@ -15,6 +15,36 @@ export function NetworkGraph({ nodes, links, selectedNode, onNodeSelect, customG
   const simulationRef = useRef(null);
   const containerRef = useRef(null);
   const previousNodesRef = useRef(new Map()); // Store previous node positions
+  const zoomRef = useRef(null); // Store zoom behavior for external control
+  const nodesDataRef = useRef([]); // Store current node positions for centering
+
+  // Expose centerOnNode function via ref
+  useImperativeHandle(ref, () => ({
+    centerOnNode: (nodeId) => {
+      if (!svgRef.current || !zoomRef.current || !containerRef.current) return;
+      
+      const node = nodesDataRef.current.find(n => n.id === nodeId);
+      if (!node || node.x === undefined || node.y === undefined) return;
+      
+      const svg = d3.select(svgRef.current);
+      const container = containerRef.current;
+      const width = container.clientWidth;
+      const height = container.clientHeight;
+      
+      // Calculate the transform to center on the node with smooth animation
+      const scale = 1.2; // Zoom in slightly when centering
+      const x = width / 2 - node.x * scale;
+      const y = height / 2 - node.y * scale;
+      
+      svg.transition()
+        .duration(750)
+        .ease(d3.easeCubicInOut)
+        .call(
+          zoomRef.current.transform,
+          d3.zoomIdentity.translate(x, y).scale(scale)
+        );
+    }
+  }), []);
 
   // Calculate bridge nodes and their connected groups
   const bridgeData = useMemo(() => {
@@ -58,18 +88,12 @@ export function NetworkGraph({ nodes, links, selectedNode, onNodeSelect, customG
              l.source?.id === nodeId || l.target?.id === nodeId
     ).length;
     // Base size 12, grows with connections, max 30
-    // Centered node gets the largest size
-    if (nodeId === centeredNodeId) return 32;
+    if (nodeId === 'me') return 32;
     return Math.min(12 + connectionCount * 2, 28);
-  }, [links, centeredNodeId]);
+  }, [links]);
 
   // Get initial position for a node based on its group
   const getInitialPosition = useCallback((node, width, height) => {
-    // Centered node always goes to center
-    if (node.id === centeredNodeId) {
-      return { x: width / 2, y: height / 2 };
-    }
-    
     // Check if we have a previous position for this node
     const prevPos = previousNodesRef.current.get(node.id);
     if (prevPos) {
@@ -105,7 +129,7 @@ export function NetworkGraph({ nodes, links, selectedNode, onNodeSelect, customG
       x: width / 2 + offset.x + (Math.random() - 0.5) * randomOffset,
       y: height / 2 + offset.y + (Math.random() - 0.5) * randomOffset,
     };
-  }, [customGroups, centeredNodeId]);
+  }, [customGroups]);
 
   useEffect(() => {
     if (!nodes.length || !svgRef.current) return;
@@ -132,6 +156,7 @@ export function NetworkGraph({ nodes, links, selectedNode, onNodeSelect, customG
       });
 
     svg.call(zoom);
+    zoomRef.current = zoom; // Store zoom for external control
 
     // Create deep copies with initial positions
     const nodesCopy = nodes.map(d => {
@@ -139,6 +164,7 @@ export function NetworkGraph({ nodes, links, selectedNode, onNodeSelect, customG
       return { ...d, x: pos.x, y: pos.y };
     });
     const linksCopy = links.map(d => ({ ...d }));
+    nodesDataRef.current = nodesCopy; // Store reference for centering
 
     // Create the force simulation with stronger clustering
     const simulation = d3.forceSimulation(nodesCopy)
@@ -157,9 +183,9 @@ export function NetworkGraph({ nodes, links, selectedNode, onNodeSelect, customG
       )
       .force('center', d3.forceCenter(width / 2, height / 2).strength(0.05))
       .force('collision', d3.forceCollide().radius(d => getNodeSize(d.id) + 15))
-      // Stronger group clustering forces - centered node stays in middle
+      // Stronger group clustering forces
       .force('x', d3.forceX(d => {
-        if (d.id === centeredNodeId) return width / 2;
+        if (d.group === 'me') return width / 2;
         const groupOffsets = {
           family: -180,
           work: 180,
@@ -167,9 +193,9 @@ export function NetworkGraph({ nodes, links, selectedNode, onNodeSelect, customG
           acquaintances: 0,
         };
         return width / 2 + (groupOffsets[d.group] || 0);
-      }).strength(d => d.id === centeredNodeId ? 0.5 : 0.12))
+      }).strength(0.12)) // Increased strength for better clustering
       .force('y', d3.forceY(d => {
-        if (d.id === centeredNodeId) return height / 2;
+        if (d.group === 'me') return height / 2;
         const groupOffsets = {
           family: -120,
           work: -120,
@@ -177,7 +203,7 @@ export function NetworkGraph({ nodes, links, selectedNode, onNodeSelect, customG
           acquaintances: 180,
         };
         return height / 2 + (groupOffsets[d.group] || 0);
-      }).strength(d => d.id === centeredNodeId ? 0.5 : 0.12));
+      }).strength(0.12)); // Increased strength for better clustering
 
     simulationRef.current = simulation;
 
@@ -353,9 +379,9 @@ export function NetworkGraph({ nodes, links, selectedNode, onNodeSelect, customG
       .attr('r', d => getNodeSize(d.id))
       .attr('fill', d => `url(#gradient-${d.group})`)
       .attr('stroke', d => d.id === selectedNode?.id ? '#1e293b' : 'rgba(255,255,255,0.8)')
-      .attr('stroke-width', d => d.id === centeredNodeId ? 3 : 2)
+      .attr('stroke-width', d => d.id === 'me' ? 3 : 2)
       .attr('filter', d => {
-        if (d.id === centeredNodeId) return 'url(#glow-me)';
+        if (d.group === 'me') return 'url(#glow-me)';
         if (bridgeData.has(d.id)) return 'url(#glow-bridge)';
         return 'url(#drop-shadow)';
       })
@@ -368,7 +394,7 @@ export function NetworkGraph({ nodes, links, selectedNode, onNodeSelect, customG
           .transition()
           .duration(200)
           .attr('r', getNodeSize(d.id) * 1.15)
-          .attr('stroke-width', d.id === centeredNodeId ? 4 : 3);
+          .attr('stroke-width', d.id === 'me' ? 4 : 3);
         
         // Also scale the bridge ring if present
         d3.select(this.parentNode).select('.bridge-ring')
@@ -381,7 +407,7 @@ export function NetworkGraph({ nodes, links, selectedNode, onNodeSelect, customG
           .transition()
           .duration(200)
           .attr('r', getNodeSize(d.id))
-          .attr('stroke-width', d.id === centeredNodeId ? 3 : 2);
+          .attr('stroke-width', d.id === 'me' ? 3 : 2);
         
         d3.select(this.parentNode).select('.bridge-ring')
           .transition()
@@ -394,11 +420,11 @@ export function NetworkGraph({ nodes, links, selectedNode, onNodeSelect, customG
       .attr('class', 'node-initial')
       .text(d => d.name.charAt(0).toUpperCase())
       .attr('x', 0)
-      .attr('y', d => d.id === centeredNodeId ? 1 : 0)
+      .attr('y', d => d.id === 'me' ? 1 : 0)
       .attr('text-anchor', 'middle')
       .attr('dominant-baseline', 'central')
       .attr('fill', 'white')
-      .attr('font-size', d => d.id === centeredNodeId ? '16px' : '12px')
+      .attr('font-size', d => d.id === 'me' ? '16px' : '12px')
       .attr('font-weight', '600')
       .attr('pointer-events', 'none')
       .style('text-shadow', '0 1px 2px rgba(0,0,0,0.3)');
@@ -411,8 +437,8 @@ export function NetworkGraph({ nodes, links, selectedNode, onNodeSelect, customG
       .attr('y', d => getNodeSize(d.id) + 16)
       .attr('text-anchor', 'middle')
       .attr('fill', '#475569')
-      .attr('font-size', d => d.id === centeredNodeId ? '13px' : '11px')
-      .attr('font-weight', d => d.id === centeredNodeId ? '600' : '500')
+      .attr('font-size', d => d.group === 'me' ? '13px' : '11px')
+      .attr('font-weight', d => d.group === 'me' ? '600' : '500')
       .attr('pointer-events', 'none');
 
     // Add bridge indicator label
@@ -528,7 +554,7 @@ export function NetworkGraph({ nodes, links, selectedNode, onNodeSelect, customG
       simulation.stop();
       tooltip.remove();
     };
-  }, [nodes, links, getNodeSize, onNodeSelect, bridgeData, getInitialPosition, centeredNodeId]);
+  }, [nodes, links, getNodeSize, onNodeSelect, bridgeData, getInitialPosition]);
 
   // Update selected node styling and highlight connected links
   useEffect(() => {
@@ -541,7 +567,7 @@ export function NetworkGraph({ nodes, links, selectedNode, onNodeSelect, customG
       .attr('stroke', d => d.id === selectedNode?.id ? '#1e293b' : 'rgba(255,255,255,0.8)')
       .attr('stroke-width', d => {
         if (d.id === selectedNode?.id) return 4;
-        return d.id === centeredNodeId ? 3 : 2;
+        return d.id === 'me' ? 3 : 2;
       });
     
     // Update links - highlight connections to selected node
@@ -586,4 +612,4 @@ export function NetworkGraph({ nodes, links, selectedNode, onNodeSelect, customG
       )}
     </div>
   );
-}
+});

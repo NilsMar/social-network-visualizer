@@ -95,10 +95,10 @@ class ApiClient {
     return this.request('/network');
   }
 
-  async saveNetworkData(nodes, links, customGroups = {}, defaultColorOverrides = {}) {
+  async saveNetworkData(nodes, links, customGroups = {}, defaultColorOverrides = {}, deletedDefaultCategories = []) {
     return this.request('/network', {
       method: 'PUT',
-      body: JSON.stringify({ nodes, links, customGroups, defaultColorOverrides }),
+      body: JSON.stringify({ nodes, links, customGroups, defaultColorOverrides, deletedDefaultCategories }),
     });
   }
 

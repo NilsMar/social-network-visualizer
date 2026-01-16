@@ -7,6 +7,7 @@ export function useNetworkData(isAuthenticated) {
   const [links, setLinks] = useState([]);
   const [customGroups, setCustomGroups] = useState({});
   const [defaultColorOverrides, setDefaultColorOverrides] = useState({});
+  const [deletedDefaultCategories, setDeletedDefaultCategories] = useState([]);
   const [isLoaded, setIsLoaded] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState(null);
@@ -26,6 +27,7 @@ export function useNetworkData(isAuthenticated) {
           setLinks(data.links || []);
           setCustomGroups(data.customGroups || {});
           setDefaultColorOverrides(data.defaultColorOverrides || {});
+          setDeletedDefaultCategories(data.deletedDefaultCategories || []);
           if (data.updatedAt) {
             setLastSaved(new Date(data.updatedAt));
           }
@@ -36,28 +38,32 @@ export function useNetworkData(isAuthenticated) {
           setLinks(initialLinks);
           setCustomGroups({});
           setDefaultColorOverrides({});
+          setDeletedDefaultCategories([]);
         }
       } else {
         // Not authenticated - use localStorage for demo
         const savedData = localStorage.getItem('social-network-data');
         if (savedData) {
           try {
-            const { nodes: savedNodes, links: savedLinks, customGroups: savedGroups, defaultColorOverrides: savedOverrides } = JSON.parse(savedData);
+            const { nodes: savedNodes, links: savedLinks, customGroups: savedGroups, defaultColorOverrides: savedOverrides, deletedDefaultCategories: savedDeleted } = JSON.parse(savedData);
             setNodes(savedNodes);
             setLinks(savedLinks);
             setCustomGroups(savedGroups || {});
             setDefaultColorOverrides(savedOverrides || {});
+            setDeletedDefaultCategories(savedDeleted || []);
           } catch (e) {
             setNodes(initialNodes);
             setLinks(initialLinks);
             setCustomGroups({});
             setDefaultColorOverrides({});
+            setDeletedDefaultCategories([]);
           }
         } else {
           setNodes(initialNodes);
           setLinks(initialLinks);
           setCustomGroups({});
           setDefaultColorOverrides({});
+          setDeletedDefaultCategories([]);
         }
       }
       setIsLoaded(true);
@@ -67,21 +73,22 @@ export function useNetworkData(isAuthenticated) {
   }, [isAuthenticated]);
 
   // Auto-save with debounce when data changes
-  const saveToServer = useCallback(async (nodesToSave, linksToSave, groupsToSave, colorOverridesToSave) => {
+  const saveToServer = useCallback(async (nodesToSave, linksToSave, groupsToSave, colorOverridesToSave, deletedDefaultsToSave) => {
     if (!isAuthenticated) {
       // Save to localStorage for non-authenticated users
       localStorage.setItem('social-network-data', JSON.stringify({ 
         nodes: nodesToSave, 
         links: linksToSave,
         customGroups: groupsToSave,
-        defaultColorOverrides: colorOverridesToSave
+        defaultColorOverrides: colorOverridesToSave,
+        deletedDefaultCategories: deletedDefaultsToSave
       }));
       return;
     }
 
     setIsSaving(true);
     try {
-      await apiClient.saveNetworkData(nodesToSave, linksToSave, groupsToSave, colorOverridesToSave);
+      await apiClient.saveNetworkData(nodesToSave, linksToSave, groupsToSave, colorOverridesToSave, deletedDefaultsToSave);
       setLastSaved(new Date());
       pendingChangesRef.current = false;
     } catch (err) {
@@ -105,7 +112,7 @@ export function useNetworkData(isAuthenticated) {
 
     // Set new timeout for auto-save (1.5 seconds after last change)
     saveTimeoutRef.current = setTimeout(() => {
-      saveToServer(nodes, links, customGroups, defaultColorOverrides);
+      saveToServer(nodes, links, customGroups, defaultColorOverrides, deletedDefaultCategories);
     }, 1500);
 
     return () => {
@@ -113,15 +120,15 @@ export function useNetworkData(isAuthenticated) {
         clearTimeout(saveTimeoutRef.current);
       }
     };
-  }, [nodes, links, customGroups, defaultColorOverrides, isLoaded, saveToServer]);
+  }, [nodes, links, customGroups, defaultColorOverrides, deletedDefaultCategories, isLoaded, saveToServer]);
 
   // Force save (for immediate saves)
   const forceSave = useCallback(async () => {
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
     }
-    await saveToServer(nodes, links, customGroups, defaultColorOverrides);
-  }, [nodes, links, customGroups, defaultColorOverrides, saveToServer]);
+    await saveToServer(nodes, links, customGroups, defaultColorOverrides, deletedDefaultCategories);
+  }, [nodes, links, customGroups, defaultColorOverrides, deletedDefaultCategories, saveToServer]);
 
   // Add a new person
   const addPerson = useCallback((person) => {
@@ -237,6 +244,7 @@ export function useNetworkData(isAuthenticated) {
         setLinks(data.links);
         setCustomGroups({});
         setDefaultColorOverrides({});
+        setDeletedDefaultCategories([]);
         setLastSaved(new Date());
       } catch (err) {
         console.error('Failed to reset network data:', err);
@@ -246,11 +254,13 @@ export function useNetworkData(isAuthenticated) {
       setLinks(initialLinks);
       setCustomGroups({});
       setDefaultColorOverrides({});
+      setDeletedDefaultCategories([]);
       localStorage.setItem('social-network-data', JSON.stringify({ 
         nodes: initialNodes, 
         links: initialLinks,
         customGroups: {},
-        defaultColorOverrides: {}
+        defaultColorOverrides: {},
+        deletedDefaultCategories: []
       }));
     }
   }, [isAuthenticated]);
@@ -292,12 +302,26 @@ export function useNetworkData(isAuthenticated) {
     }));
   }, []);
 
-  // Delete/reset a default category's color override
+  // Delete a default category (hides it and moves people to 'friends')
   const deleteDefaultCategory = useCallback((key) => {
+    // Move all people in this category to 'friends'
+    setNodes(prev => prev.map(node => 
+      node.group === key ? { ...node, group: 'friends' } : node
+    ));
+    // Add to deleted list
+    setDeletedDefaultCategories(prev => 
+      prev.includes(key) ? prev : [...prev, key]
+    );
+    // Remove any color override
     setDefaultColorOverrides(prev => {
       const { [key]: removed, ...rest } = prev;
       return rest;
     });
+  }, []);
+
+  // Restore a deleted default category
+  const restoreDefaultCategory = useCallback((key) => {
+    setDeletedDefaultCategories(prev => prev.filter(k => k !== key));
   }, []);
 
   // Get all groups (default + custom)
@@ -367,6 +391,8 @@ export function useNetworkData(isAuthenticated) {
     deleteCategory,
     updateDefaultColor,
     deleteDefaultCategory,
+    deletedDefaultCategories,
+    restoreDefaultCategory,
     getAllGroups,
     bulkAddPeople,
   };

@@ -37,6 +37,8 @@ function NetworkApp() {
     deleteCategory,
     updateDefaultColor,
     deleteDefaultCategory,
+    deletedDefaultCategories,
+    restoreDefaultCategory,
     getAllGroups,
     bulkAddPeople,
   } = useNetworkData(isAuthenticated);
@@ -335,6 +337,7 @@ function NetworkApp() {
             onGroupSelect={handleGroupSelect}
             customGroups={customGroups}
             defaultColorOverrides={defaultColorOverrides}
+            deletedDefaultCategories={deletedDefaultCategories}
           />
         </div>
 
@@ -426,7 +429,9 @@ function NetworkApp() {
           onDeleteCategory={deleteCategory}
           onUpdateDefaultColor={updateDefaultColor}
           onDeleteDefaultCategory={deleteDefaultCategory}
+          onRestoreDefaultCategory={restoreDefaultCategory}
           defaultColorOverrides={defaultColorOverrides}
+          deletedDefaultCategories={deletedDefaultCategories}
           onClose={() => setShowCategoryManager(false)}
         />
       )}

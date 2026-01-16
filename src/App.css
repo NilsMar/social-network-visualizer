@@ -1799,6 +1799,37 @@ body {
   box-shadow: 0 0 0 2px var(--bg-secondary);
 }
 
+.restore-categories-section {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-md);
+}
+
+.restore-categories-section h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.8rem;
+}
+
+.deleted-categories-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.deleted-category-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+}
+
+.deleted-category-item .category-name {
+  color: var(--text-muted);
+}
+
 .add-category-section {
   margin-top: 1.5rem;
   padding-top: 1.5rem;

@@ -8,7 +8,9 @@ export function CategoryManager({
   onDeleteCategory,
   onUpdateDefaultColor,
   onDeleteDefaultCategory,
+  onRestoreDefaultCategory,
   defaultColorOverrides = {},
+  deletedDefaultCategories = [],
   onClose 
 }) {
   const [newCategoryName, setNewCategoryName] = useState('');
@@ -20,15 +22,20 @@ export function CategoryManager({
   const [editValue, setEditValue] = useState('');
   const [editColorValue, setEditColorValue] = useState('');
 
-  // Combine default and custom groups
+  // Combine default and custom groups (filter out deleted defaults)
   const defaultGroups = Object.entries(defaultGroupLabels)
-    .filter(([key]) => key !== 'me')
+    .filter(([key]) => key !== 'me' && !deletedDefaultCategories.includes(key))
     .map(([key, label]) => ({ 
       key, 
       label, 
       color: defaultColorOverrides[key] || defaultGroupColors[key],
       isDefault: true 
     }));
+
+  // Deleted default categories (for restore)
+  const deletedDefaults = Object.entries(defaultGroupLabels)
+    .filter(([key]) => key !== 'me' && deletedDefaultCategories.includes(key))
+    .map(([key, label]) => ({ key, label }));
 
   const customGroupsList = Object.entries(customGroups).map(([key, data]) => ({
     key,
@@ -216,6 +223,25 @@ export function CategoryManager({
             </div>
           ))}
         </div>
+
+        {deletedDefaults.length > 0 && (
+          <div className="restore-categories-section">
+            <h3>Deleted Categories</h3>
+            <div className="deleted-categories-list">
+              {deletedDefaults.map((cat) => (
+                <div key={cat.key} className="deleted-category-item">
+                  <span className="category-name">{cat.label}</span>
+                  <button 
+                    className="btn btn-small btn-secondary"
+                    onClick={() => onRestoreDefaultCategory(cat.key)}
+                  >
+                    Restore
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="add-category-section">
           <h3>Add New Category</h3>

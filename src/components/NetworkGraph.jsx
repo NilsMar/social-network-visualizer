@@ -1,8 +1,8 @@
-import { useEffect, useRef, useCallback, useMemo } from 'react';
+import { useEffect, useRef, useCallback, useMemo, useImperativeHandle, forwardRef } from 'react';
 import * as d3 from 'd3';
 import { defaultGroupColors } from '../data/initialData';
 
-export function NetworkGraph({ nodes, links, selectedNode, onNodeSelect, customGroups = {} }) {
+export const NetworkGraph = forwardRef(function NetworkGraph({ nodes, links, selectedNode, onNodeSelect, customGroups = {} }, ref) {
   // Merge default and custom group colors
   const groupColors = useMemo(() => ({
     ...defaultGroupColors,
@@ -14,6 +14,8 @@ export function NetworkGraph({ nodes, links, selectedNode, onNodeSelect, customG
   const simulationRef = useRef(null);
   const containerRef = useRef(null);
   const previousNodesRef = useRef(new Map()); // Store previous node positions
+  const zoomRef = useRef(null); // Store zoom behavior for external control
+  const nodesDataRef = useRef([]); // Store current node positions for centering
 
   // Calculate bridge nodes and their connected groups
   const bridgeData = useMemo(() => {

@@ -1,11 +1,13 @@
 import { useState } from 'react';
-import { availableColors, defaultGroupLabels } from '../data/initialData';
+import { availableColors, defaultGroupLabels, defaultGroupColors } from '../data/initialData';
 
 export function CategoryManager({ 
   customGroups, 
   onAddCategory, 
   onUpdateCategory, 
   onDeleteCategory,
+  onUpdateDefaultColor,
+  defaultColorOverrides = {},
   onClose 
 }) {
   const [newCategoryName, setNewCategoryName] = useState('');
@@ -13,6 +15,7 @@ export function CategoryManager({
   const [editingCategory, setEditingCategory] = useState(null);
   const [editName, setEditName] = useState('');
   const [editColor, setEditColor] = useState('');
+  const [editingDefaultColor, setEditingDefaultColor] = useState(null);
 
   // Combine default and custom groups
   const defaultGroups = Object.entries(defaultGroupLabels)
@@ -82,15 +85,53 @@ export function CategoryManager({
 
         <div className="category-list">
           <h3>Default Categories</h3>
-          {defaultGroups.map((cat) => (
-            <div key={cat.key} className="category-item default">
-              <span className="category-dot" style={{ backgroundColor: defaultGroupLabels[cat.key] === 'Family' ? '#c9577a' : 
-                defaultGroupLabels[cat.key] === 'Work' ? '#3a9ba5' : 
-                defaultGroupLabels[cat.key] === 'Friends' ? '#7c6bb8' : '#7a8694' }} />
-              <span className="category-name">{cat.label}</span>
-              <span className="category-badge">Default</span>
-            </div>
-          ))}
+          {defaultGroups.map((cat) => {
+            const currentColor = defaultColorOverrides[cat.key] || defaultGroupColors[cat.key];
+            return (
+              <div key={cat.key} className="category-item default">
+                {editingDefaultColor === cat.key ? (
+                  <div className="category-edit-row">
+                    <span className="category-name">{cat.label}</span>
+                    <div className="color-picker-section">
+                      <label>Color:</label>
+                      <div className="color-picker-inline">
+                        {availableColors.map((color) => (
+                          <button
+                            key={color}
+                            type="button"
+                            className={`color-option ${currentColor === color ? 'selected' : ''}`}
+                            style={{ backgroundColor: color }}
+                            onClick={() => {
+                              onUpdateDefaultColor(cat.key, color);
+                            }}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                    <div className="edit-actions">
+                      <button className="btn btn-small btn-secondary" onClick={() => setEditingDefaultColor(null)}>Done</button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <span className="category-dot" style={{ backgroundColor: currentColor }} />
+                    <span className="category-name">{cat.label}</span>
+                    <span className="category-badge">Default</span>
+                    <button 
+                      className="btn-icon" 
+                      onClick={() => setEditingDefaultColor(cat.key)}
+                      title="Change color"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <circle cx="12" cy="12" r="10" />
+                        <circle cx="12" cy="12" r="4" />
+                      </svg>
+                    </button>
+                  </>
+                )}
+              </div>
+            );
+          })}
 
           {customGroupsList.length > 0 && (
             <>
@@ -105,16 +146,19 @@ export function CategoryManager({
                         onChange={(e) => setEditName(e.target.value)}
                         className="category-edit-input"
                       />
-                      <div className="color-picker-inline">
-                        {availableColors.map((color) => (
-                          <button
-                            key={color}
-                            type="button"
-                            className={`color-option ${editColor === color ? 'selected' : ''}`}
-                            style={{ backgroundColor: color }}
-                            onClick={() => setEditColor(color)}
-                          />
-                        ))}
+                      <div className="color-picker-section">
+                        <label>Color:</label>
+                        <div className="color-picker-inline">
+                          {availableColors.map((color) => (
+                            <button
+                              key={color}
+                              type="button"
+                              className={`color-option ${editColor === color ? 'selected' : ''}`}
+                              style={{ backgroundColor: color }}
+                              onClick={() => setEditColor(color)}
+                            />
+                          ))}
+                        </div>
                       </div>
                       <div className="edit-actions">
                         <button className="btn btn-small btn-primary" onClick={handleSaveEdit}>Save</button>

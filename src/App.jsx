@@ -20,6 +20,7 @@ function NetworkApp() {
     nodes,
     links,
     customGroups,
+    defaultColorOverrides,
     isLoaded,
     isSaving,
     lastSaved,
@@ -34,6 +35,7 @@ function NetworkApp() {
     addCategory,
     updateCategory,
     deleteCategory,
+    updateDefaultColor,
     getAllGroups,
     bulkAddPeople,
   } = useNetworkData(isAuthenticated);
@@ -398,6 +400,8 @@ function NetworkApp() {
           onAddCategory={addCategory}
           onUpdateCategory={updateCategory}
           onDeleteCategory={deleteCategory}
+          onUpdateDefaultColor={updateDefaultColor}
+          defaultColorOverrides={defaultColorOverrides}
           onClose={() => setShowCategoryManager(false)}
         />
       )}

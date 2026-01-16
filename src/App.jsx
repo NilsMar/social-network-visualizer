@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback } from 'react';
 import { NetworkGraph } from './components/NetworkGraph';
 import { NodeDetail } from './components/NodeDetail';
 import { AddPersonForm } from './components/AddPersonForm';
@@ -40,8 +40,7 @@ function NetworkApp() {
     bulkAddPeople,
   } = useNetworkData(isAuthenticated);
 
-  const networkGraphRef = useRef(null);
-
+  const [centeredNodeId, setCenteredNodeId] = useState('me');
   const [selectedNode, setSelectedNode] = useState(null);
   const [selectedGroup, setSelectedGroup] = useState(null);
   const [showAddPerson, setShowAddPerson] = useState(false);

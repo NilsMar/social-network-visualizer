@@ -340,6 +340,7 @@ export function useNetworkData(isAuthenticated) {
     nodes,
     links,
     customGroups,
+    defaultColorOverrides,
     isLoaded,
     isSaving,
     lastSaved,
@@ -356,6 +357,7 @@ export function useNetworkData(isAuthenticated) {
     addCategory,
     updateCategory,
     deleteCategory,
+    updateDefaultColor,
     getAllGroups,
     bulkAddPeople,
   };

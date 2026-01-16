@@ -334,7 +334,7 @@ app.post('/api/network/reset', authenticateToken, async (req, res) => {
     const defaultNodesWithName = [...defaultNodes];
     defaultNodesWithName[0] = { ...defaultNodesWithName[0], name: user?.name || 'Me' };
 
-    await saveNetworkData(req.user.id, defaultNodesWithName, defaultLinks, {});
+    await saveNetworkData(req.user.id, defaultNodesWithName, defaultLinks, {}, {});
 
     res.json({ 
       message: 'Network data reset successfully',

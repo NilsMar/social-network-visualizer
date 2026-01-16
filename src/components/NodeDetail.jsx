@@ -1,6 +1,6 @@
 import { groupColors, groupLabels } from '../data/initialData';
 
-export function NodeDetail({ node, connections, onClose, onEdit, onDelete, onEditLink, onCenterNode }) {
+export function NodeDetail({ node, connections, onClose, onEdit, onDelete, onEditLink, onSetAsCenter, centeredNodeId }) {
   if (!node) return null;
 
   const sortedConnections = [...connections].sort((a, b) => b.strength - a.strength);
@@ -103,16 +103,24 @@ export function NodeDetail({ node, connections, onClose, onEdit, onDelete, onEdi
       </div>
 
       <div className="node-actions">
-        <button className="btn btn-center" onClick={() => onCenterNode(node.id)} title="Center on graph">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <circle cx="12" cy="12" r="3" />
-            <path d="M12 2v4" />
-            <path d="M12 18v4" />
-            <path d="M2 12h4" />
-            <path d="M18 12h4" />
-          </svg>
-          Center
-        </button>
+        {node.id !== centeredNodeId && (
+          <button className="btn btn-center" onClick={() => onSetAsCenter(node.id)} title="Place at center of network">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="10" />
+              <circle cx="12" cy="12" r="3" />
+            </svg>
+            Set as Center
+          </button>
+        )}
+        {node.id === centeredNodeId && node.id !== 'me' && (
+          <button className="btn btn-center active" onClick={() => onSetAsCenter('me')} title="Return to your network">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+              <path d="M3 3v5h5" />
+            </svg>
+            Back to Me
+          </button>
+        )}
         {node.id !== 'me' && (
           <>
             <button className="btn btn-edit" onClick={() => onEdit(node)}>

@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback } from 'react';
 import { NetworkGraph } from './components/NetworkGraph';
 import { NodeDetail } from './components/NodeDetail';
 import { AddPersonForm } from './components/AddPersonForm';
@@ -40,8 +40,7 @@ function NetworkApp() {
     bulkAddPeople,
   } = useNetworkData(isAuthenticated);
 
-  const networkGraphRef = useRef(null);
-
+  const [centeredNodeId, setCenteredNodeId] = useState('me');
   const [selectedNode, setSelectedNode] = useState(null);
   const [selectedGroup, setSelectedGroup] = useState(null);
   const [showAddPerson, setShowAddPerson] = useState(false);
@@ -161,10 +160,9 @@ function NetworkApp() {
     }
   }, [logout]);
 
-  const handleCenterNode = useCallback((nodeId) => {
-    if (networkGraphRef.current) {
-      networkGraphRef.current.centerOnNode(nodeId);
-    }
+  const handleSetAsCenter = useCallback((nodeId) => {
+    setCenteredNodeId(nodeId);
+    setSelectedNode(null);
   }, []);
 
   if (!isLoaded) {
@@ -192,8 +190,20 @@ function NetworkApp() {
     <div className="app">
       <header className="app-header">
         <div className="header-left">
-          <h1>Social Network v2</h1>
+          <h1>Social Network</h1>
           <span className="subtitle">Visualize your connections</span>
+          {centeredNodeId !== 'me' && (
+            <div className="centered-indicator">
+              <span>Viewing: <strong>{nodes.find(n => n.id === centeredNodeId)?.name}</strong></span>
+              <button 
+                className="btn-reset-center" 
+                onClick={() => handleSetAsCenter('me')}
+                title="Back to your network"
+              >
+                ×
+              </button>
+            </div>
+          )}
         </div>
         <div className="header-actions">
           {isSaving && (
@@ -310,13 +320,13 @@ function NetworkApp() {
       <main className="app-main">
         <div className="graph-area">
           <NetworkGraph
-            ref={networkGraphRef}
             nodes={nodes}
             links={links}
             selectedNode={selectedNode}
             onNodeSelect={handleNodeSelect}
             customGroups={customGroups}
             defaultColorOverrides={defaultColorOverrides}
+            centeredNodeId={centeredNodeId}
           />
           <Legend 
             nodes={nodes} 
@@ -350,7 +360,8 @@ function NetworkApp() {
             onEdit={handleEditPerson}
             onDelete={handleDeletePerson}
             onEditLink={handleEditLink}
-            onCenterNode={handleCenterNode}
+            onSetAsCenter={handleSetAsCenter}
+            centeredNodeId={centeredNodeId}
             customGroups={customGroups}
           />
         )}

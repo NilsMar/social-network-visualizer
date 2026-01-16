@@ -7,14 +7,18 @@ export function CategoryManager({
   onUpdateCategory, 
   onDeleteCategory,
   onUpdateDefaultColor,
+  onDeleteDefaultCategory,
   defaultColorOverrides = {},
   onClose 
 }) {
   const [newCategoryName, setNewCategoryName] = useState('');
   const [newCategoryColor, setNewCategoryColor] = useState(availableColors[5]);
-  const [editingCategory, setEditingCategory] = useState(null);
-  const [editName, setEditName] = useState('');
-  const [editColor, setEditColor] = useState('');
+  
+  // Edit states
+  const [editingName, setEditingName] = useState(null);
+  const [editingColor, setEditingColor] = useState(null);
+  const [editValue, setEditValue] = useState('');
+  const [editColorValue, setEditColorValue] = useState('');
 
   // Combine default and custom groups
   const defaultGroups = Object.entries(defaultGroupLabels)
@@ -42,7 +46,6 @@ export function CategoryManager({
 
     const key = newCategoryName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
     
-    // Check for duplicate
     if (defaultGroupLabels[key] || customGroups[key]) {
       alert('A category with this name already exists!');
       return;
@@ -57,40 +60,72 @@ export function CategoryManager({
     setNewCategoryColor(availableColors[Math.floor(Math.random() * availableColors.length)]);
   };
 
-  const handleStartEdit = (category) => {
-    setEditingCategory(category.key);
-    setEditName(category.label);
-    setEditColor(category.color);
+  // Name editing
+  const handleStartEditName = (cat) => {
+    setEditingName(cat.key);
+    setEditValue(cat.label);
+    setEditingColor(null);
   };
 
-  const handleSaveEdit = (isDefault) => {
-    if (!editName.trim()) return;
+  const handleSaveName = (cat) => {
+    if (!editValue.trim()) return;
     
-    if (isDefault) {
-      // For default categories, only update color
-      onUpdateDefaultColor(editingCategory, editColor);
+    if (cat.isDefault) {
+      // Default categories can't have their name changed
+      alert('Default category names cannot be changed.');
     } else {
-      // For custom categories, update name and color
-      onUpdateCategory(editingCategory, {
-        label: editName.trim(),
-        color: editColor,
+      onUpdateCategory(cat.key, {
+        label: editValue.trim(),
+        color: cat.color,
       });
     }
     
-    setEditingCategory(null);
-    setEditName('');
-    setEditColor('');
+    setEditingName(null);
+    setEditValue('');
   };
 
-  const handleCancelEdit = () => {
-    setEditingCategory(null);
-    setEditName('');
-    setEditColor('');
+  const handleCancelEditName = () => {
+    setEditingName(null);
+    setEditValue('');
   };
 
-  const handleDelete = (key) => {
-    if (window.confirm('Delete this category? People in this category will be moved to "Friends".')) {
-      onDeleteCategory(key);
+  // Color editing
+  const handleStartEditColor = (cat) => {
+    setEditingColor(cat.key);
+    setEditColorValue(cat.color);
+    setEditingName(null);
+  };
+
+  const handleSelectColor = (cat, color) => {
+    if (cat.isDefault) {
+      onUpdateDefaultColor(cat.key, color);
+    } else {
+      onUpdateCategory(cat.key, {
+        label: cat.label,
+        color: color,
+      });
+    }
+    setEditingColor(null);
+    setEditColorValue('');
+  };
+
+  const handleCancelEditColor = () => {
+    setEditingColor(null);
+    setEditColorValue('');
+  };
+
+  // Delete
+  const handleDelete = (cat) => {
+    const message = cat.isDefault 
+      ? `Delete "${cat.label}"? This will reset it to default settings.`
+      : `Delete "${cat.label}"? People in this category will be moved to "Friends".`;
+    
+    if (window.confirm(message)) {
+      if (cat.isDefault) {
+        onDeleteDefaultCategory(cat.key);
+      } else {
+        onDeleteCategory(cat.key);
+      }
     }
   };
 
@@ -105,39 +140,34 @@ export function CategoryManager({
         <div className="category-list">
           {allCategories.map((cat) => (
             <div key={cat.key} className={`category-item ${cat.isDefault ? 'default' : ''}`}>
-              {editingCategory === cat.key ? (
-                <div className="category-edit-row">
-                  <div className="edit-field">
-                    <label>Name:</label>
-                    {cat.isDefault ? (
-                      <span className="category-name-display">{cat.label}</span>
-                    ) : (
-                      <input
-                        type="text"
-                        value={editName}
-                        onChange={(e) => setEditName(e.target.value)}
-                        className="category-edit-input"
+              {editingName === cat.key ? (
+                <div className="category-edit-inline">
+                  <input
+                    type="text"
+                    value={editValue}
+                    onChange={(e) => setEditValue(e.target.value)}
+                    className="category-edit-input"
+                    autoFocus
+                    disabled={cat.isDefault}
+                  />
+                  <button className="btn btn-small btn-primary" onClick={() => handleSaveName(cat)}>Save</button>
+                  <button className="btn btn-small btn-secondary" onClick={handleCancelEditName}>Cancel</button>
+                </div>
+              ) : editingColor === cat.key ? (
+                <div className="category-edit-inline color-edit">
+                  <span className="category-name">{cat.label}</span>
+                  <div className="color-picker-inline">
+                    {availableColors.map((color) => (
+                      <button
+                        key={color}
+                        type="button"
+                        className={`color-option ${cat.color === color ? 'selected' : ''}`}
+                        style={{ backgroundColor: color }}
+                        onClick={() => handleSelectColor(cat, color)}
                       />
-                    )}
+                    ))}
                   </div>
-                  <div className="color-picker-section">
-                    <label>Color:</label>
-                    <div className="color-picker-inline">
-                      {availableColors.map((color) => (
-                        <button
-                          key={color}
-                          type="button"
-                          className={`color-option ${editColor === color ? 'selected' : ''}`}
-                          style={{ backgroundColor: color }}
-                          onClick={() => setEditColor(color)}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                  <div className="edit-actions">
-                    <button className="btn btn-small btn-primary" onClick={() => handleSaveEdit(cat.isDefault)}>Save</button>
-                    <button className="btn btn-small btn-secondary" onClick={handleCancelEdit}>Cancel</button>
-                  </div>
+                  <button className="btn btn-small btn-secondary" onClick={handleCancelEditColor}>Cancel</button>
                 </div>
               ) : (
                 <>
@@ -145,28 +175,41 @@ export function CategoryManager({
                   <span className="category-name">{cat.label}</span>
                   {cat.isDefault && <span className="category-badge">Default</span>}
                   <div className="category-actions">
-                    <button 
-                      className="btn-icon" 
-                      onClick={() => handleStartEdit(cat)}
-                      title="Edit"
-                    >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                      </svg>
-                    </button>
+                    {/* Edit name - only for custom categories */}
                     {!cat.isDefault && (
                       <button 
-                        className="btn-icon btn-danger" 
-                        onClick={() => handleDelete(cat.key)}
-                        title="Delete"
+                        className="btn-icon" 
+                        onClick={() => handleStartEditName(cat)}
+                        title="Edit name"
                       >
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <polyline points="3,6 5,6 21,6" />
-                          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
                         </svg>
                       </button>
                     )}
+                    {/* Edit color */}
+                    <button 
+                      className="btn-icon" 
+                      onClick={() => handleStartEditColor(cat)}
+                      title="Change color"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <circle cx="12" cy="12" r="10" />
+                        <circle cx="12" cy="12" r="4" />
+                      </svg>
+                    </button>
+                    {/* Delete */}
+                    <button 
+                      className="btn-icon btn-danger" 
+                      onClick={() => handleDelete(cat)}
+                      title="Delete"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <polyline points="3,6 5,6 21,6" />
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                      </svg>
+                    </button>
                   </div>
                 </>
               )}

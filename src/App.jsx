@@ -36,6 +36,7 @@ function NetworkApp() {
     updateCategory,
     deleteCategory,
     updateDefaultColor,
+    deleteDefaultCategory,
     getAllGroups,
     bulkAddPeople,
   } = useNetworkData(isAuthenticated);
@@ -424,6 +425,7 @@ function NetworkApp() {
           onUpdateCategory={updateCategory}
           onDeleteCategory={deleteCategory}
           onUpdateDefaultColor={updateDefaultColor}
+          onDeleteDefaultCategory={deleteDefaultCategory}
           defaultColorOverrides={defaultColorOverrides}
           onClose={() => setShowCategoryManager(false)}
         />

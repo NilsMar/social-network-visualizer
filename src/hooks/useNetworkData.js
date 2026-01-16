@@ -292,6 +292,14 @@ export function useNetworkData(isAuthenticated) {
     }));
   }, []);
 
+  // Delete/reset a default category's color override
+  const deleteDefaultCategory = useCallback((key) => {
+    setDefaultColorOverrides(prev => {
+      const { [key]: removed, ...rest } = prev;
+      return rest;
+    });
+  }, []);
+
   // Get all groups (default + custom)
   const getAllGroups = useCallback(() => {
     return {
@@ -358,6 +366,7 @@ export function useNetworkData(isAuthenticated) {
     updateCategory,
     deleteCategory,
     updateDefaultColor,
+    deleteDefaultCategory,
     getAllGroups,
     bulkAddPeople,
   };

@@ -1714,6 +1714,36 @@ body {
   width: 100%;
 }
 
+.category-edit-inline {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.25rem 0;
+}
+
+.category-edit-inline .category-edit-input {
+  flex: 1;
+  max-width: 180px;
+}
+
+.category-edit-inline.color-edit {
+  flex-wrap: wrap;
+}
+
+.category-edit-inline.color-edit .category-name {
+  font-weight: 500;
+  min-width: 100px;
+}
+
+.category-edit-inline .color-picker-inline {
+  flex: 1;
+}
+
+.category-edit-inline .btn-small {
+  flex-shrink: 0;
+}
+
 .edit-field {
   display: flex;
   flex-direction: column;

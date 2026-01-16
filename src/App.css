@@ -1598,7 +1598,15 @@ body {
 }
 
 .category-item.default {
-  opacity: 0.7;
+  opacity: 0.85;
+}
+
+.category-item .btn-icon {
+  opacity: 1;
+}
+
+.category-item:hover .btn-icon {
+  color: var(--text-primary);
 }
 
 .category-dot {

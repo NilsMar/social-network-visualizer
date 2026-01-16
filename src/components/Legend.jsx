@@ -1,6 +1,6 @@
 import { defaultGroupColors, defaultGroupLabels } from '../data/initialData';
 
-export function Legend({ nodes, selectedGroup, onGroupSelect, customGroups = {}, defaultColorOverrides = {} }) {
+export function Legend({ nodes, selectedGroup, onGroupSelect, customGroups = {} }) {
   // Merge default and custom groups
   const allGroupLabels = {
     ...defaultGroupLabels,
@@ -11,7 +11,6 @@ export function Legend({ nodes, selectedGroup, onGroupSelect, customGroups = {},
   
   const allGroupColors = {
     ...defaultGroupColors,
-    ...defaultColorOverrides,
     ...Object.fromEntries(
       Object.entries(customGroups).map(([key, data]) => [key, data.color])
     )

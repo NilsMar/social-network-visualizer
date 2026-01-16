@@ -192,7 +192,7 @@ function NetworkApp() {
     <div className="app">
       <header className="app-header">
         <div className="header-left">
-          <h1>Social Network</h1>
+          <h1>Social Network v2</h1>
           <span className="subtitle">Visualize your connections</span>
         </div>
         <div className="header-actions">

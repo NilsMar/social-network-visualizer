@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { NetworkGraph } from './components/NetworkGraph';
 import { NodeDetail } from './components/NodeDetail';
 import { AddPersonForm } from './components/AddPersonForm';
@@ -39,6 +39,8 @@ function NetworkApp() {
     getAllGroups,
     bulkAddPeople,
   } = useNetworkData(isAuthenticated);
+
+  const networkGraphRef = useRef(null);
 
   const [selectedNode, setSelectedNode] = useState(null);
   const [selectedGroup, setSelectedGroup] = useState(null);
@@ -158,6 +160,12 @@ function NetworkApp() {
       setShowUserMenu(false);
     }
   }, [logout]);
+
+  const handleCenterNode = useCallback((nodeId) => {
+    if (networkGraphRef.current) {
+      networkGraphRef.current.centerOnNode(nodeId);
+    }
+  }, []);
 
   if (!isLoaded) {
     return (
@@ -302,17 +310,20 @@ function NetworkApp() {
       <main className="app-main">
         <div className="graph-area">
           <NetworkGraph
+            ref={networkGraphRef}
             nodes={nodes}
             links={links}
             selectedNode={selectedNode}
             onNodeSelect={handleNodeSelect}
             customGroups={customGroups}
+            defaultColorOverrides={defaultColorOverrides}
           />
           <Legend 
             nodes={nodes} 
             selectedGroup={selectedGroup}
             onGroupSelect={handleGroupSelect}
             customGroups={customGroups}
+            defaultColorOverrides={defaultColorOverrides}
           />
         </div>
 
@@ -339,6 +350,7 @@ function NetworkApp() {
             onEdit={handleEditPerson}
             onDelete={handleDeletePerson}
             onEditLink={handleEditLink}
+            onCenterNode={handleCenterNode}
             customGroups={customGroups}
           />
         )}

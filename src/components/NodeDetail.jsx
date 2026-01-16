@@ -1,6 +1,6 @@
 import { groupColors, groupLabels } from '../data/initialData';
 
-export function NodeDetail({ node, connections, onClose, onEdit, onDelete, onEditLink }) {
+export function NodeDetail({ node, connections, onClose, onEdit, onDelete, onEditLink, onCenterNode }) {
   if (!node) return null;
 
   const sortedConnections = [...connections].sort((a, b) => b.strength - a.strength);
@@ -102,16 +102,28 @@ export function NodeDetail({ node, connections, onClose, onEdit, onDelete, onEdi
         )}
       </div>
 
-      {node.id !== 'me' && (
-        <div className="node-actions">
-          <button className="btn btn-edit" onClick={() => onEdit(node)}>
-            Edit Person
-          </button>
-          <button className="btn btn-delete" onClick={() => onDelete(node.id)}>
-            Remove
-          </button>
-        </div>
-      )}
+      <div className="node-actions">
+        <button className="btn btn-center" onClick={() => onCenterNode(node.id)} title="Center on graph">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M12 2v4" />
+            <path d="M12 18v4" />
+            <path d="M2 12h4" />
+            <path d="M18 12h4" />
+          </svg>
+          Center
+        </button>
+        {node.id !== 'me' && (
+          <>
+            <button className="btn btn-edit" onClick={() => onEdit(node)}>
+              Edit Person
+            </button>
+            <button className="btn btn-delete" onClick={() => onDelete(node.id)}>
+              Remove
+            </button>
+          </>
+        )}
+      </div>
     </div>
   );
 }

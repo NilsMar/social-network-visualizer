@@ -2,20 +2,49 @@ import { useEffect, useRef, useCallback, useMemo, useImperativeHandle, forwardRe
 import * as d3 from 'd3';
 import { defaultGroupColors } from '../data/initialData';
 
-export const NetworkGraph = forwardRef(function NetworkGraph({ nodes, links, selectedNode, onNodeSelect, customGroups = {} }, ref) {
+export const NetworkGraph = forwardRef(function NetworkGraph({ nodes, links, selectedNode, onNodeSelect, customGroups = {}, defaultColorOverrides = {} }, ref) {
   // Merge default and custom group colors
   const groupColors = useMemo(() => ({
     ...defaultGroupColors,
+    ...defaultColorOverrides,
     ...Object.fromEntries(
       Object.entries(customGroups).map(([key, data]) => [key, data.color])
     )
-  }), [customGroups]);
+  }), [customGroups, defaultColorOverrides]);
   const svgRef = useRef(null);
   const simulationRef = useRef(null);
   const containerRef = useRef(null);
   const previousNodesRef = useRef(new Map()); // Store previous node positions
   const zoomRef = useRef(null); // Store zoom behavior for external control
   const nodesDataRef = useRef([]); // Store current node positions for centering
+
+  // Expose centerOnNode function via ref
+  useImperativeHandle(ref, () => ({
+    centerOnNode: (nodeId) => {
+      if (!svgRef.current || !zoomRef.current || !containerRef.current) return;
+      
+      const node = nodesDataRef.current.find(n => n.id === nodeId);
+      if (!node || node.x === undefined || node.y === undefined) return;
+      
+      const svg = d3.select(svgRef.current);
+      const container = containerRef.current;
+      const width = container.clientWidth;
+      const height = container.clientHeight;
+      
+      // Calculate the transform to center on the node with smooth animation
+      const scale = 1.2; // Zoom in slightly when centering
+      const x = width / 2 - node.x * scale;
+      const y = height / 2 - node.y * scale;
+      
+      svg.transition()
+        .duration(750)
+        .ease(d3.easeCubicInOut)
+        .call(
+          zoomRef.current.transform,
+          d3.zoomIdentity.translate(x, y).scale(scale)
+        );
+    }
+  }), []);
 
   // Calculate bridge nodes and their connected groups
   const bridgeData = useMemo(() => {
@@ -127,6 +156,7 @@ export const NetworkGraph = forwardRef(function NetworkGraph({ nodes, links, sel
       });
 
     svg.call(zoom);
+    zoomRef.current = zoom; // Store zoom for external control
 
     // Create deep copies with initial positions
     const nodesCopy = nodes.map(d => {
@@ -134,6 +164,7 @@ export const NetworkGraph = forwardRef(function NetworkGraph({ nodes, links, sel
       return { ...d, x: pos.x, y: pos.y };
     });
     const linksCopy = links.map(d => ({ ...d }));
+    nodesDataRef.current = nodesCopy; // Store reference for centering
 
     // Create the force simulation with stronger clustering
     const simulation = d3.forceSimulation(nodesCopy)
@@ -581,4 +612,4 @@ export const NetworkGraph = forwardRef(function NetworkGraph({ nodes, links, sel
       )}
     </div>
   );
-}
+});

@@ -523,8 +523,15 @@ export function NetworkGraph({ nodes, links, selectedNode, onNodeSelect, customG
       .translate(width * (1 - initialScale) / 2, height * (1 - initialScale) / 2)
       .scale(initialScale));
 
-    // Reheat simulation to ensure proper clustering
-    simulation.alpha(0.8).restart();
+    // Run simulation to completion immediately (no animation)
+    simulation.stop();
+    for (let i = 0; i < 300; i++) {
+      simulation.tick();
+    }
+    
+    // Update positions after simulation completes
+    link.attr('d', linkPath);
+    node.attr('transform', d => `translate(${d.x},${d.y})`);
 
     // Cleanup
     return () => {

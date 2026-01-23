@@ -334,9 +334,9 @@ export function NetworkGraph({ nodes, links, selectedNode, onNodeSelect, customG
     });
 
     // Animation timing constants
-    const baseDelay = 300; // ms delay per distance level
-    const nodeFadeDuration = 400;
-    const linkGrowDuration = 500;
+    const baseDelay = 600; // ms delay per distance level
+    const nodeFadeDuration = 700;
+    const linkGrowDuration = 900;
 
     // Create links with curved paths for cross-group connections
     const link = g.append('g')

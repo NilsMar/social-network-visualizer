@@ -2,7 +2,7 @@ import { useEffect, useRef, useCallback, useMemo } from 'react';
 import * as d3 from 'd3';
 import { defaultGroupColors } from '../data/initialData';
 
-export function NetworkGraph({ nodes, links, selectedNode, onNodeSelect, customGroups = {}, defaultColorOverrides = {}, centeredNodeId = 'me', shouldAnimate = false, onAnimationComplete }) {
+export function NetworkGraph({ nodes, links, selectedNode, onNodeSelect, customGroups = {}, defaultColorOverrides = {}, centeredNodeId = 'me' }) {
   // Merge default and custom group colors
   const groupColors = useMemo(() => ({
     ...defaultGroupColors,
@@ -15,7 +15,6 @@ export function NetworkGraph({ nodes, links, selectedNode, onNodeSelect, customG
   const simulationRef = useRef(null);
   const containerRef = useRef(null);
   const previousNodesRef = useRef(new Map()); // Store previous node positions
-  const hasAnimatedRef = useRef(false); // Track if initial animation has played
 
   // Calculate bridge nodes and their connected groups
   const bridgeData = useMemo(() => {
@@ -304,12 +303,6 @@ export function NetworkGraph({ nodes, links, selectedNode, onNodeSelect, customG
       }
     });
 
-    // Animation configuration
-    const isAnimating = shouldAnimate && !hasAnimatedRef.current;
-    
-    // Get unique groups for animation (excluding 'me')
-    const uniqueGroups = [...new Set(nodes.filter(n => n.group !== 'me').map(n => n.group))];
-
     // Create links with curved paths for cross-group connections
     const link = g.append('g')
       .attr('class', 'links')
@@ -318,7 +311,7 @@ export function NetworkGraph({ nodes, links, selectedNode, onNodeSelect, customG
       .join('path')
       .attr('fill', 'none')
       .attr('stroke', '#94a3b8')
-      .attr('stroke-opacity', isAnimating ? 0 : d => 0.5 + (d.strength / 20))
+      .attr('stroke-opacity', d => 0.5 + (d.strength / 20))
       .attr('stroke-width', d => Math.max(1.5, d.strength / 2.5))
       .attr('stroke-linecap', 'round');
 
@@ -329,10 +322,6 @@ export function NetworkGraph({ nodes, links, selectedNode, onNodeSelect, customG
       .data(nodesCopy)
       .join('g')
       .attr('cursor', 'pointer')
-      .attr('opacity', d => {
-        if (!isAnimating) return 1;
-        return d.id === centeredNodeId ? 1 : 0;
-      })
       .call(d3.drag()
         .on('start', (event, d) => {
           if (!event.active) simulation.alphaTarget(0.3).restart();
@@ -537,125 +526,12 @@ export function NetworkGraph({ nodes, links, selectedNode, onNodeSelect, customG
     // Reheat simulation to ensure proper clustering
     simulation.alpha(0.8).restart();
 
-    // Animate network building out category by category
-    if (isAnimating) {
-      hasAnimatedRef.current = true;
-      
-      // Animation timing
-      const settleTime = 600; // Let simulation settle first
-      const lineGrowDuration = 800; // Time for lines to grow to a category
-      const nodeFadeDuration = 400; // Time for nodes to fade in
-      const pauseBetweenCategories = 200; // Pause between categories
-      const lineStagger = 80; // Stagger between individual lines
-      
-      // Calculate total animation time
-      const totalAnimationTime = settleTime + uniqueGroups.length * (lineGrowDuration + nodeFadeDuration + pauseBetweenCategories);
-      
-      // Wait for simulation to settle, then start animation
-      setTimeout(() => {
-        // Animate each category one at a time
-        uniqueGroups.forEach((group, groupIndex) => {
-          const groupDelay = groupIndex * (lineGrowDuration + nodeFadeDuration + pauseBetweenCategories);
-          
-          // Find all links that connect center to this group
-          let linkCount = 0;
-          link.each(function(d) {
-            const sourceId = d.source?.id || d.source;
-            const targetId = d.target?.id || d.target;
-            const sourceNode = nodesCopy.find(n => n.id === sourceId);
-            const targetNode = nodesCopy.find(n => n.id === targetId);
-            
-            if (!sourceNode || !targetNode) return;
-            
-            // Check if this link connects center to current group
-            const connectsCenterToGroup = 
-              (sourceId === centeredNodeId && targetNode.group === group) ||
-              (targetId === centeredNodeId && sourceNode.group === group);
-            
-            if (connectsCenterToGroup) {
-              const path = d3.select(this);
-              const pathLength = this.getTotalLength() || 150;
-              const individualDelay = groupDelay + (linkCount * lineStagger);
-              
-              // Set up the line for drawing animation
-              path
-                .attr('stroke-dasharray', pathLength)
-                .attr('stroke-dashoffset', pathLength)
-                .attr('stroke-opacity', 0.5 + (d.strength / 20));
-              
-              // Animate line growing outward
-              path.transition()
-                .delay(individualDelay)
-                .duration(lineGrowDuration)
-                .ease(d3.easeLinear)
-                .attr('stroke-dashoffset', 0);
-              
-              linkCount++;
-            }
-          });
-          
-          // Fade in nodes of this group after lines finish
-          const nodesInGroup = node.filter(d => d.group === group);
-          nodesInGroup
-            .transition()
-            .delay(groupDelay + lineGrowDuration)
-            .duration(nodeFadeDuration)
-            .ease(d3.easeQuadOut)
-            .attr('opacity', 1);
-          
-          // Now animate links between nodes within this group and to previously shown groups
-          const shownGroups = uniqueGroups.slice(0, groupIndex + 1);
-          link.each(function(d) {
-            const sourceId = d.source?.id || d.source;
-            const targetId = d.target?.id || d.target;
-            const sourceNode = nodesCopy.find(n => n.id === sourceId);
-            const targetNode = nodesCopy.find(n => n.id === targetId);
-            
-            if (!sourceNode || !targetNode) return;
-            if (sourceId === centeredNodeId || targetId === centeredNodeId) return; // Already handled
-            
-            // Check if both nodes are in shown groups
-            const bothInShownGroups = 
-              shownGroups.includes(sourceNode.group) && 
-              shownGroups.includes(targetNode.group);
-            
-            // Check if at least one is in current group (to animate now)
-            const involvesCurrentGroup = 
-              sourceNode.group === group || targetNode.group === group;
-            
-            if (bothInShownGroups && involvesCurrentGroup) {
-              const path = d3.select(this);
-              const pathLength = this.getTotalLength() || 150;
-              const intraGroupDelay = groupDelay + lineGrowDuration + nodeFadeDuration * 0.5;
-              
-              path
-                .attr('stroke-dasharray', pathLength)
-                .attr('stroke-dashoffset', pathLength)
-                .attr('stroke-opacity', 0.5 + (d.strength / 20));
-              
-              path.transition()
-                .delay(intraGroupDelay)
-                .duration(lineGrowDuration * 0.6)
-                .ease(d3.easeLinear)
-                .attr('stroke-dashoffset', 0);
-            }
-          });
-        });
-        
-      }, settleTime);
-      
-      // Call onAnimationComplete after all animations finish
-      if (onAnimationComplete) {
-        setTimeout(onAnimationComplete, totalAnimationTime);
-      }
-    }
-
     // Cleanup
     return () => {
       simulation.stop();
       tooltip.remove();
     };
-  }, [nodes, links, getNodeSize, onNodeSelect, bridgeData, getInitialPosition, centeredNodeId, shouldAnimate, onAnimationComplete]);
+  }, [nodes, links, getNodeSize, onNodeSelect, bridgeData, getInitialPosition, centeredNodeId]);
 
   // Update selected node styling and highlight connected links
   useEffect(() => {

@@ -58,7 +58,6 @@ function NetworkApp() {
   const [preselectedGroup, setPreselectedGroup] = useState(null);
   const [preselectedPerson, setPreselectedPerson] = useState(null);
   const [showUserMenu, setShowUserMenu] = useState(false);
-  const [shouldAnimateNetwork, setShouldAnimateNetwork] = useState(true); // Animate on first load
 
   const handleNodeSelect = useCallback((node) => {
     setSelectedNode(node);
@@ -345,8 +344,6 @@ function NetworkApp() {
             customGroups={customGroups}
             defaultColorOverrides={defaultColorOverrides}
             centeredNodeId={centeredNodeId}
-            shouldAnimate={shouldAnimateNetwork}
-            onAnimationComplete={() => setShouldAnimateNetwork(false)}
           />
           <Legend 
             nodes={nodes} 

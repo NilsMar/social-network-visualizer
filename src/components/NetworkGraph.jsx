@@ -303,6 +303,41 @@ export function NetworkGraph({ nodes, links, selectedNode, onNodeSelect, customG
       }
     });
 
+    // Calculate distance from center node for each node (for animation timing)
+    const nodeDistances = new Map();
+    nodeDistances.set(centeredNodeId, 0);
+    
+    const queue = [centeredNodeId];
+    while (queue.length > 0) {
+      const currentId = queue.shift();
+      const currentDist = nodeDistances.get(currentId);
+      
+      linksCopy.forEach(link => {
+        const sourceId = link.source?.id || link.source;
+        const targetId = link.target?.id || link.target;
+        
+        if (sourceId === currentId && !nodeDistances.has(targetId)) {
+          nodeDistances.set(targetId, currentDist + 1);
+          queue.push(targetId);
+        } else if (targetId === currentId && !nodeDistances.has(sourceId)) {
+          nodeDistances.set(sourceId, currentDist + 1);
+          queue.push(sourceId);
+        }
+      });
+    }
+    
+    // Set distance for any disconnected nodes
+    nodesCopy.forEach(n => {
+      if (!nodeDistances.has(n.id)) {
+        nodeDistances.set(n.id, 99);
+      }
+    });
+
+    // Animation timing constants
+    const baseDelay = 300; // ms delay per distance level
+    const nodeFadeDuration = 400;
+    const linkGrowDuration = 500;
+
     // Create links with curved paths for cross-group connections
     const link = g.append('g')
       .attr('class', 'links')
@@ -311,9 +346,11 @@ export function NetworkGraph({ nodes, links, selectedNode, onNodeSelect, customG
       .join('path')
       .attr('fill', 'none')
       .attr('stroke', '#94a3b8')
-      .attr('stroke-opacity', d => 0.5 + (d.strength / 20))
+      .attr('stroke-opacity', 0) // Start hidden
       .attr('stroke-width', d => Math.max(1.5, d.strength / 2.5))
-      .attr('stroke-linecap', 'round');
+      .attr('stroke-linecap', 'round')
+      .attr('stroke-dasharray', function() { return this.getTotalLength ? this.getTotalLength() : 1000; })
+      .attr('stroke-dashoffset', function() { return this.getTotalLength ? this.getTotalLength() : 1000; });
 
     // Create node groups
     const node = g.append('g')
@@ -322,6 +359,7 @@ export function NetworkGraph({ nodes, links, selectedNode, onNodeSelect, customG
       .data(nodesCopy)
       .join('g')
       .attr('cursor', 'pointer')
+      .attr('opacity', d => d.id === centeredNodeId ? 1 : 0) // Only center visible initially
       .call(d3.drag()
         .on('start', (event, d) => {
           if (!event.active) simulation.alphaTarget(0.3).restart();
@@ -532,6 +570,58 @@ export function NetworkGraph({ nodes, links, selectedNode, onNodeSelect, customG
     // Update positions after simulation completes
     link.attr('d', linkPath);
     node.attr('transform', d => `translate(${d.x},${d.y})`);
+
+    // Now set up the stroke-dasharray based on actual path lengths
+    link.each(function() {
+      const length = this.getTotalLength();
+      d3.select(this)
+        .attr('stroke-dasharray', length)
+        .attr('stroke-dashoffset', length);
+    });
+
+    // Animate the reveal from center outward
+    // First, show the center node with a scale-up effect
+    node.filter(d => d.id === centeredNodeId)
+      .attr('transform', d => `translate(${d.x},${d.y}) scale(0)`)
+      .transition()
+      .duration(400)
+      .ease(d3.easeBackOut)
+      .attr('transform', d => `translate(${d.x},${d.y}) scale(1)`);
+
+    // Then animate links growing outward, grouped by the distance of their target node
+    link.each(function(d) {
+      const sourceId = d.source?.id || d.source;
+      const targetId = d.target?.id || d.target;
+      const sourceDist = nodeDistances.get(sourceId) || 0;
+      const targetDist = nodeDistances.get(targetId) || 0;
+      // Link appears when the farther node would appear
+      const linkDist = Math.max(sourceDist, targetDist);
+      const delay = baseDelay + (linkDist - 1) * baseDelay;
+      
+      d3.select(this)
+        .transition()
+        .delay(delay)
+        .duration(linkGrowDuration)
+        .ease(d3.easeQuadOut)
+        .attr('stroke-opacity', 0.5 + (d.strength / 20))
+        .attr('stroke-dashoffset', 0);
+    });
+
+    // Animate nodes fading in based on their distance from center
+    node.filter(d => d.id !== centeredNodeId)
+      .each(function(d) {
+        const dist = nodeDistances.get(d.id) || 1;
+        const delay = baseDelay + (dist - 1) * baseDelay + linkGrowDuration * 0.5;
+        
+        d3.select(this)
+          .attr('transform', `translate(${d.x},${d.y}) scale(0.5)`)
+          .transition()
+          .delay(delay)
+          .duration(nodeFadeDuration)
+          .ease(d3.easeBackOut.overshoot(1.2))
+          .attr('opacity', 1)
+          .attr('transform', `translate(${d.x},${d.y}) scale(1)`);
+      });
 
     // Cleanup
     return () => {

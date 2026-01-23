@@ -17,49 +17,6 @@ export function NetworkGraph({ nodes, links, selectedNode, onNodeSelect, customG
   const previousNodesRef = useRef(new Map()); // Store previous node positions
   const hasAnimatedRef = useRef(false); // Track if initial animation has played
 
-  // Calculate distance (in hops) from the center node for each node
-  const nodeDistances = useMemo(() => {
-    const distances = new Map();
-    distances.set(centeredNodeId, 0);
-    
-    // BFS to find shortest path to each node from center
-    const queue = [centeredNodeId];
-    const visited = new Set([centeredNodeId]);
-    
-    while (queue.length > 0) {
-      const currentId = queue.shift();
-      const currentDist = distances.get(currentId);
-      
-      // Find all neighbors
-      links.forEach(link => {
-        const sourceId = link.source?.id || link.source;
-        const targetId = link.target?.id || link.target;
-        
-        let neighborId = null;
-        if (sourceId === currentId && !visited.has(targetId)) {
-          neighborId = targetId;
-        } else if (targetId === currentId && !visited.has(sourceId)) {
-          neighborId = sourceId;
-        }
-        
-        if (neighborId) {
-          visited.add(neighborId);
-          distances.set(neighborId, currentDist + 1);
-          queue.push(neighborId);
-        }
-      });
-    }
-    
-    // Nodes not connected get a large distance
-    nodes.forEach(node => {
-      if (!distances.has(node.id)) {
-        distances.set(node.id, 999);
-      }
-    });
-    
-    return distances;
-  }, [nodes, links, centeredNodeId]);
-
   // Calculate bridge nodes and their connected groups
   const bridgeData = useMemo(() => {
     const bridges = new Map(); // nodeId -> Set of connected group names (excluding own group)
@@ -350,8 +307,8 @@ export function NetworkGraph({ nodes, links, selectedNode, onNodeSelect, customG
     // Animation configuration
     const isAnimating = shouldAnimate && !hasAnimatedRef.current;
     
-    // Calculate max distance for animation timing
-    const maxDistance = Math.max(...Array.from(nodeDistances.values()).filter(d => d < 999));
+    // Get unique groups for animation (excluding 'me')
+    const uniqueGroups = [...new Set(nodes.filter(n => n.group !== 'me').map(n => n.group))];
 
     // Create links with curved paths for cross-group connections
     const link = g.append('g')
@@ -361,7 +318,7 @@ export function NetworkGraph({ nodes, links, selectedNode, onNodeSelect, customG
       .join('path')
       .attr('fill', 'none')
       .attr('stroke', '#94a3b8')
-      .attr('stroke-opacity', d => 0.5 + (d.strength / 20))
+      .attr('stroke-opacity', isAnimating ? 0 : d => 0.5 + (d.strength / 20))
       .attr('stroke-width', d => Math.max(1.5, d.strength / 2.5))
       .attr('stroke-linecap', 'round');
 
@@ -580,82 +537,110 @@ export function NetworkGraph({ nodes, links, selectedNode, onNodeSelect, customG
     // Reheat simulation to ensure proper clustering
     simulation.alpha(0.8).restart();
 
-    // Animate network building out from center like tentacles
+    // Animate network building out category by category
     if (isAnimating) {
       hasAnimatedRef.current = true;
       
       // Animation timing
-      const settleTime = 800; // Let simulation settle first
-      const lineDrawDuration = 500; // Time for each line to draw
-      const nodeFadeDuration = 300; // Time for node to fade in
-      const delayBetweenLevels = 150; // Stagger between lines at same level
+      const settleTime = 600; // Let simulation settle first
+      const lineGrowDuration = 800; // Time for lines to grow to a category
+      const nodeFadeDuration = 400; // Time for nodes to fade in
+      const pauseBetweenCategories = 200; // Pause between categories
+      const lineStagger = 80; // Stagger between individual lines
       
       // Calculate total animation time
-      const totalAnimationTime = settleTime + (maxDistance * (lineDrawDuration + delayBetweenLevels * 3)) + nodeFadeDuration;
+      const totalAnimationTime = settleTime + uniqueGroups.length * (lineGrowDuration + nodeFadeDuration + pauseBetweenCategories);
       
-      // Initially hide all links using dasharray (for drawing effect)
-      link.each(function() {
-        const path = d3.select(this);
-        // Will set actual length after simulation settles
-        path.attr('stroke-dasharray', '1000 1000')
-            .attr('stroke-dashoffset', 1000);
-      });
-      
-      // Wait for simulation to settle, then animate
+      // Wait for simulation to settle, then start animation
       setTimeout(() => {
-        // Now animate level by level
-        for (let dist = 1; dist <= maxDistance; dist++) {
-          const levelDelay = (dist - 1) * (lineDrawDuration + delayBetweenLevels * 2);
+        // Animate each category one at a time
+        uniqueGroups.forEach((group, groupIndex) => {
+          const groupDelay = groupIndex * (lineGrowDuration + nodeFadeDuration + pauseBetweenCategories);
           
-          // Find all links that connect to nodes at this distance
-          // (links where the further endpoint is at this distance)
-          let linkIndex = 0;
+          // Find all links that connect center to this group
+          let linkCount = 0;
           link.each(function(d) {
             const sourceId = d.source?.id || d.source;
             const targetId = d.target?.id || d.target;
-            const sourceDist = nodeDistances.get(sourceId) || 999;
-            const targetDist = nodeDistances.get(targetId) || 999;
+            const sourceNode = nodesCopy.find(n => n.id === sourceId);
+            const targetNode = nodesCopy.find(n => n.id === targetId);
             
-            // This link belongs to the level of its further endpoint
-            const linkLevel = Math.max(sourceDist, targetDist);
+            if (!sourceNode || !targetNode) return;
             
-            if (linkLevel === dist) {
+            // Check if this link connects center to current group
+            const connectsCenterToGroup = 
+              (sourceId === centeredNodeId && targetNode.group === group) ||
+              (targetId === centeredNodeId && sourceNode.group === group);
+            
+            if (connectsCenterToGroup) {
               const path = d3.select(this);
-              const pathLength = this.getTotalLength() || 200;
-              const staggerDelay = linkIndex * delayBetweenLevels;
+              const pathLength = this.getTotalLength() || 150;
+              const individualDelay = groupDelay + (linkCount * lineStagger);
               
-              // Set the dasharray to actual path length
-              path.attr('stroke-dasharray', pathLength)
-                  .attr('stroke-dashoffset', pathLength);
+              // Set up the line for drawing animation
+              path
+                .attr('stroke-dasharray', pathLength)
+                .attr('stroke-dashoffset', pathLength)
+                .attr('stroke-opacity', 0.5 + (d.strength / 20));
               
-              // Animate the line drawing outward
+              // Animate line growing outward
               path.transition()
-                .delay(levelDelay + staggerDelay)
-                .duration(lineDrawDuration)
-                .ease(d3.easeQuadOut)
+                .delay(individualDelay)
+                .duration(lineGrowDuration)
+                .ease(d3.easeLinear)
                 .attr('stroke-dashoffset', 0);
               
-              linkIndex++;
+              linkCount++;
             }
           });
           
-          // Fade in nodes at this distance after lines start drawing
-          const nodesAtDist = node.filter(d => nodeDistances.get(d.id) === dist);
-          nodesAtDist
+          // Fade in nodes of this group after lines finish
+          const nodesInGroup = node.filter(d => d.group === group);
+          nodesInGroup
             .transition()
-            .delay(levelDelay + lineDrawDuration * 0.6)
+            .delay(groupDelay + lineGrowDuration)
             .duration(nodeFadeDuration)
             .ease(d3.easeQuadOut)
             .attr('opacity', 1);
-        }
-        
-        // Handle disconnected nodes (fade in at the end)
-        const disconnectedDelay = maxDistance * (lineDrawDuration + delayBetweenLevels * 2);
-        node.filter(d => nodeDistances.get(d.id) === 999)
-          .transition()
-          .delay(disconnectedDelay)
-          .duration(nodeFadeDuration)
-          .attr('opacity', 0.7); // Slightly dimmer since disconnected
+          
+          // Now animate links between nodes within this group and to previously shown groups
+          const shownGroups = uniqueGroups.slice(0, groupIndex + 1);
+          link.each(function(d) {
+            const sourceId = d.source?.id || d.source;
+            const targetId = d.target?.id || d.target;
+            const sourceNode = nodesCopy.find(n => n.id === sourceId);
+            const targetNode = nodesCopy.find(n => n.id === targetId);
+            
+            if (!sourceNode || !targetNode) return;
+            if (sourceId === centeredNodeId || targetId === centeredNodeId) return; // Already handled
+            
+            // Check if both nodes are in shown groups
+            const bothInShownGroups = 
+              shownGroups.includes(sourceNode.group) && 
+              shownGroups.includes(targetNode.group);
+            
+            // Check if at least one is in current group (to animate now)
+            const involvesCurrentGroup = 
+              sourceNode.group === group || targetNode.group === group;
+            
+            if (bothInShownGroups && involvesCurrentGroup) {
+              const path = d3.select(this);
+              const pathLength = this.getTotalLength() || 150;
+              const intraGroupDelay = groupDelay + lineGrowDuration + nodeFadeDuration * 0.5;
+              
+              path
+                .attr('stroke-dasharray', pathLength)
+                .attr('stroke-dashoffset', pathLength)
+                .attr('stroke-opacity', 0.5 + (d.strength / 20));
+              
+              path.transition()
+                .delay(intraGroupDelay)
+                .duration(lineGrowDuration * 0.6)
+                .ease(d3.easeLinear)
+                .attr('stroke-dashoffset', 0);
+            }
+          });
+        });
         
       }, settleTime);
       
@@ -670,7 +655,7 @@ export function NetworkGraph({ nodes, links, selectedNode, onNodeSelect, customG
       simulation.stop();
       tooltip.remove();
     };
-  }, [nodes, links, getNodeSize, onNodeSelect, bridgeData, getInitialPosition, centeredNodeId, shouldAnimate, nodeDistances, onAnimationComplete]);
+  }, [nodes, links, getNodeSize, onNodeSelect, bridgeData, getInitialPosition, centeredNodeId, shouldAnimate, onAnimationComplete]);
 
   // Update selected node styling and highlight connected links
   useEffect(() => {

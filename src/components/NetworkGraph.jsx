@@ -348,8 +348,6 @@ export function NetworkGraph({ nodes, links, selectedNode, onNodeSelect, customG
     });
 
     // Animation configuration
-    const animationDuration = 600; // ms per distance level
-    const animationDelay = 300; // delay between distance levels
     const isAnimating = shouldAnimate && !hasAnimatedRef.current;
     
     // Calculate max distance for animation timing
@@ -363,7 +361,7 @@ export function NetworkGraph({ nodes, links, selectedNode, onNodeSelect, customG
       .join('path')
       .attr('fill', 'none')
       .attr('stroke', '#94a3b8')
-      .attr('stroke-opacity', isAnimating ? 0 : d => 0.5 + (d.strength / 20))
+      .attr('stroke-opacity', d => 0.5 + (d.strength / 20))
       .attr('stroke-width', d => Math.max(1.5, d.strength / 2.5))
       .attr('stroke-linecap', 'round');
 
@@ -582,99 +580,84 @@ export function NetworkGraph({ nodes, links, selectedNode, onNodeSelect, customG
     // Reheat simulation to ensure proper clustering
     simulation.alpha(0.8).restart();
 
-    // Animate nodes appearing from center if shouldAnimate is true
+    // Animate network building out from center like tentacles
     if (isAnimating) {
       hasAnimatedRef.current = true;
       
-      // Initial delay for center node animation
-      const centerAnimationDuration = 400;
-      const expandStartDelay = centerAnimationDuration + 100;
+      // Animation timing
+      const settleTime = 800; // Let simulation settle first
+      const lineDrawDuration = 500; // Time for each line to draw
+      const nodeFadeDuration = 300; // Time for node to fade in
+      const delayBetweenLevels = 150; // Stagger between lines at same level
       
-      // Calculate total animation time for callback
-      const totalAnimationTime = expandStartDelay + (maxDistance + 1) * animationDelay + animationDuration;
+      // Calculate total animation time
+      const totalAnimationTime = settleTime + (maxDistance * (lineDrawDuration + delayBetweenLevels * 3)) + nodeFadeDuration;
       
-      // Start center node small and pulse in
-      const centerNode = node.filter(d => d.id === centeredNodeId);
-      centerNode.selectAll('.node-circle')
-        .attr('transform', 'scale(0.3)')
-        .transition()
-        .duration(centerAnimationDuration)
-        .ease(d3.easeBackOut.overshoot(1.5))
-        .attr('transform', 'scale(1)');
-      
-      // Also scale the circles for a nicer pop-in effect
-      node.filter(d => d.id !== centeredNodeId)
-        .selectAll('.node-circle')
-        .attr('transform', 'scale(0)');
-      
-      node.filter(d => d.id !== centeredNodeId)
-        .selectAll('.bridge-ring')
-        .attr('transform', 'scale(0)');
-      
-      // Animate nodes appearing based on distance from center
-      for (let dist = 1; dist <= maxDistance; dist++) {
-        const delay = expandStartDelay + (dist - 1) * animationDelay;
-        
-        // Animate nodes at this distance - fade in and scale up
-        const nodesAtDist = node.filter(d => nodeDistances.get(d.id) === dist);
-        
-        nodesAtDist
-          .transition()
-          .delay(delay)
-          .duration(animationDuration)
-          .ease(d3.easeBackOut.overshoot(1.2))
-          .attr('opacity', 1);
-        
-        nodesAtDist.selectAll('.node-circle')
-          .transition()
-          .delay(delay)
-          .duration(animationDuration)
-          .ease(d3.easeBackOut.overshoot(1.2))
-          .attr('transform', 'scale(1)');
-        
-        nodesAtDist.selectAll('.bridge-ring')
-          .transition()
-          .delay(delay)
-          .duration(animationDuration)
-          .ease(d3.easeBackOut.overshoot(1.2))
-          .attr('transform', 'scale(1)');
-      }
-      
-      // Animate disconnected nodes last
-      const disconnectedDelay = expandStartDelay + maxDistance * animationDelay;
-      const disconnectedNodes = node.filter(d => nodeDistances.get(d.id) === 999);
-      
-      disconnectedNodes
-        .transition()
-        .delay(disconnectedDelay)
-        .duration(animationDuration)
-        .ease(d3.easeBackOut.overshoot(1.2))
-        .attr('opacity', 1);
-      
-      disconnectedNodes.selectAll('.node-circle')
-        .transition()
-        .delay(disconnectedDelay)
-        .duration(animationDuration)
-        .ease(d3.easeBackOut.overshoot(1.2))
-        .attr('transform', 'scale(1)');
-      
-      // Animate links appearing when both endpoints are visible
-      link.each(function(d) {
-        const sourceId = d.source?.id || d.source;
-        const targetId = d.target?.id || d.target;
-        const sourceDist = nodeDistances.get(sourceId) || 0;
-        const targetDist = nodeDistances.get(targetId) || 0;
-        const linkDist = Math.max(sourceDist, targetDist);
-        // Links appear slightly after their furthest node starts appearing
-        const linkDelay = expandStartDelay + (linkDist - 1) * animationDelay + animationDuration * 0.3;
-        
-        d3.select(this)
-          .transition()
-          .delay(Math.max(0, linkDelay))
-          .duration(animationDuration * 0.7)
-          .ease(d3.easeQuadOut)
-          .attr('stroke-opacity', 0.5 + (d.strength / 20));
+      // Initially hide all links using dasharray (for drawing effect)
+      link.each(function() {
+        const path = d3.select(this);
+        // Will set actual length after simulation settles
+        path.attr('stroke-dasharray', '1000 1000')
+            .attr('stroke-dashoffset', 1000);
       });
+      
+      // Wait for simulation to settle, then animate
+      setTimeout(() => {
+        // Now animate level by level
+        for (let dist = 1; dist <= maxDistance; dist++) {
+          const levelDelay = (dist - 1) * (lineDrawDuration + delayBetweenLevels * 2);
+          
+          // Find all links that connect to nodes at this distance
+          // (links where the further endpoint is at this distance)
+          let linkIndex = 0;
+          link.each(function(d) {
+            const sourceId = d.source?.id || d.source;
+            const targetId = d.target?.id || d.target;
+            const sourceDist = nodeDistances.get(sourceId) || 999;
+            const targetDist = nodeDistances.get(targetId) || 999;
+            
+            // This link belongs to the level of its further endpoint
+            const linkLevel = Math.max(sourceDist, targetDist);
+            
+            if (linkLevel === dist) {
+              const path = d3.select(this);
+              const pathLength = this.getTotalLength() || 200;
+              const staggerDelay = linkIndex * delayBetweenLevels;
+              
+              // Set the dasharray to actual path length
+              path.attr('stroke-dasharray', pathLength)
+                  .attr('stroke-dashoffset', pathLength);
+              
+              // Animate the line drawing outward
+              path.transition()
+                .delay(levelDelay + staggerDelay)
+                .duration(lineDrawDuration)
+                .ease(d3.easeQuadOut)
+                .attr('stroke-dashoffset', 0);
+              
+              linkIndex++;
+            }
+          });
+          
+          // Fade in nodes at this distance after lines start drawing
+          const nodesAtDist = node.filter(d => nodeDistances.get(d.id) === dist);
+          nodesAtDist
+            .transition()
+            .delay(levelDelay + lineDrawDuration * 0.6)
+            .duration(nodeFadeDuration)
+            .ease(d3.easeQuadOut)
+            .attr('opacity', 1);
+        }
+        
+        // Handle disconnected nodes (fade in at the end)
+        const disconnectedDelay = maxDistance * (lineDrawDuration + delayBetweenLevels * 2);
+        node.filter(d => nodeDistances.get(d.id) === 999)
+          .transition()
+          .delay(disconnectedDelay)
+          .duration(nodeFadeDuration)
+          .attr('opacity', 0.7); // Slightly dimmer since disconnected
+        
+      }, settleTime);
       
       // Call onAnimationComplete after all animations finish
       if (onAnimationComplete) {

@@ -13,6 +13,7 @@ export function AddPersonForm({
   const [details, setDetails] = useState('');
   const [connectToMe, setConnectToMe] = useState(true);
   const [connectionStrength, setConnectionStrength] = useState(defaultStrength);
+  const [lastContacted, setLastContacted] = useState('');
 
   const isEditing = !!editPerson;
 
@@ -31,12 +32,17 @@ export function AddPersonForm({
       setGroup(editPerson.group);
       setDetails(editPerson.details || '');
       setConnectToMe(false); // Don't show connect option when editing
+      // Convert ISO date to YYYY-MM-DD for input
+      setLastContacted(editPerson.lastContacted 
+        ? new Date(editPerson.lastContacted).toISOString().split('T')[0] 
+        : '');
     } else {
       setName('');
       setGroup(preselectedGroup || 'friends');
       setDetails('');
       setConnectToMe(true);
       setConnectionStrength(defaultStrength);
+      setLastContacted('');
     }
   }, [editPerson, preselectedGroup, defaultStrength]);
 
@@ -51,6 +57,7 @@ export function AddPersonForm({
       details: details.trim(),
       connectToMe: !isEditing && connectToMe,
       connectionStrength: connectToMe ? connectionStrength : null,
+      lastContacted: lastContacted ? new Date(lastContacted).toISOString() : null,
     });
 
     // Reset form
@@ -59,6 +66,7 @@ export function AddPersonForm({
     setDetails('');
     setConnectToMe(true);
     setConnectionStrength(defaultStrength);
+    setLastContacted('');
   };
 
   const availableGroups = Object.entries(allGroups).filter(([key]) => key !== 'me');
@@ -114,6 +122,17 @@ export function AddPersonForm({
               onChange={(e) => setDetails(e.target.value)}
               placeholder="How do you know them? Any notes..."
               rows={3}
+            />
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="lastContacted">Last Contacted (optional)</label>
+            <input
+              type="date"
+              id="lastContacted"
+              value={lastContacted}
+              onChange={(e) => setLastContacted(e.target.value)}
+              max={new Date().toISOString().split('T')[0]}
             />
           </div>
 

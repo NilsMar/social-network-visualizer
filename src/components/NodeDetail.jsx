@@ -1,9 +1,45 @@
 import { groupColors, groupLabels } from '../data/initialData';
 
-export function NodeDetail({ node, connections, onClose, onEdit, onDelete, onEditLink, onSetAsCenter, centeredNodeId }) {
+// Helper function to format relative time
+function formatTimeAgo(dateString) {
+  if (!dateString) return null;
+  
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffMs = now - date;
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  
+  if (diffDays === 0) return 'Today';
+  if (diffDays === 1) return 'Yesterday';
+  if (diffDays < 7) return `${diffDays} days ago`;
+  if (diffDays < 14) return '1 week ago';
+  if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
+  if (diffDays < 60) return '1 month ago';
+  if (diffDays < 365) return `${Math.floor(diffDays / 30)} months ago`;
+  if (diffDays < 730) return '1 year ago';
+  return `${Math.floor(diffDays / 365)} years ago`;
+}
+
+// Helper to get urgency level based on last contacted
+function getContactUrgency(dateString) {
+  if (!dateString) return 'never';
+  
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffDays = Math.floor((now - date) / (1000 * 60 * 60 * 24));
+  
+  if (diffDays <= 7) return 'recent';
+  if (diffDays <= 30) return 'moderate';
+  if (diffDays <= 90) return 'overdue';
+  return 'urgent';
+}
+
+export function NodeDetail({ node, connections, onClose, onEdit, onDelete, onEditLink, onSetAsCenter, centeredNodeId, onUpdateLastContacted }) {
   if (!node) return null;
 
   const sortedConnections = [...connections].sort((a, b) => b.strength - a.strength);
+  const lastContactedAgo = formatTimeAgo(node.lastContacted);
+  const contactUrgency = getContactUrgency(node.lastContacted);
 
   const getStrengthLabel = (strength) => {
     if (strength >= 8) return 'Very Strong';
@@ -11,6 +47,10 @@ export function NodeDetail({ node, connections, onClose, onEdit, onDelete, onEdi
     if (strength >= 4) return 'Moderate';
     if (strength >= 2) return 'Weak';
     return 'Very Weak';
+  };
+
+  const handleMarkContacted = () => {
+    onUpdateLastContacted(node.id);
   };
 
   return (
@@ -57,6 +97,33 @@ export function NodeDetail({ node, connections, onClose, onEdit, onDelete, onEdi
           <span className="stat-label">Avg. Strength</span>
         </div>
       </div>
+
+      {node.id !== 'me' && (
+        <div className="last-contacted-section">
+          <div className="last-contacted-info">
+            <div className="last-contacted-header">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10" />
+                <polyline points="12,6 12,12 16,14" />
+              </svg>
+              <span className="last-contacted-label">Last Contacted</span>
+            </div>
+            <div className={`last-contacted-value urgency-${contactUrgency}`}>
+              {lastContactedAgo || 'Never'}
+            </div>
+          </div>
+          <button 
+            className="btn btn-contacted"
+            onClick={handleMarkContacted}
+            title="Mark as contacted today"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <polyline points="20,6 9,17 4,12" />
+            </svg>
+            Contacted Today
+          </button>
+        </div>
+      )}
 
       <div className="connections-section">
         <h3>Connections</h3>

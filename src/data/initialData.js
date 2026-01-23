@@ -1,31 +1,38 @@
 // Initial sample data for the social network
 // Groups: me, family, work, friends, acquaintances
 
+// Helper to create dates relative to today
+const daysAgo = (days) => {
+  const date = new Date();
+  date.setDate(date.getDate() - days);
+  return date.toISOString();
+};
+
 export const initialNodes = [
   // You at the center
   { id: 'me', name: 'Me', group: 'me', details: 'The center of my social universe' },
   
   // Family
-  { id: 'mom', name: 'Mom', group: 'family', details: 'Always supportive, calls every Sunday' },
-  { id: 'dad', name: 'Dad', group: 'family', details: 'Wise advice, loves hiking' },
-  { id: 'sister', name: 'Sarah', group: 'family', details: 'Younger sister, lives in Berlin' },
-  { id: 'brother', name: 'Max', group: 'family', details: 'Older brother, software engineer' },
+  { id: 'mom', name: 'Mom', group: 'family', details: 'Always supportive, calls every Sunday', lastContacted: daysAgo(3) },
+  { id: 'dad', name: 'Dad', group: 'family', details: 'Wise advice, loves hiking', lastContacted: daysAgo(10) },
+  { id: 'sister', name: 'Sarah', group: 'family', details: 'Younger sister, lives in Berlin', lastContacted: daysAgo(21) },
+  { id: 'brother', name: 'Max', group: 'family', details: 'Older brother, software engineer', lastContacted: daysAgo(5) },
   
   // Work
-  { id: 'boss', name: 'Thomas', group: 'work', details: 'Team lead, very organized' },
-  { id: 'colleague1', name: 'Anna', group: 'work', details: 'Desk neighbor, coffee buddy' },
-  { id: 'colleague2', name: 'Michael', group: 'work', details: 'Backend developer, chess enthusiast' },
-  { id: 'colleague3', name: 'Lisa', group: 'work', details: 'Designer, great at presentations' },
+  { id: 'boss', name: 'Thomas', group: 'work', details: 'Team lead, very organized', lastContacted: daysAgo(1) },
+  { id: 'colleague1', name: 'Anna', group: 'work', details: 'Desk neighbor, coffee buddy', lastContacted: daysAgo(0) },
+  { id: 'colleague2', name: 'Michael', group: 'work', details: 'Backend developer, chess enthusiast', lastContacted: daysAgo(2) },
+  { id: 'colleague3', name: 'Lisa', group: 'work', details: 'Designer, great at presentations', lastContacted: daysAgo(7) },
   
   // Friends
-  { id: 'bestfriend', name: 'Chris', group: 'friends', details: 'Best friend since university, knows everything' },
-  { id: 'friend1', name: 'Julia', group: 'friends', details: 'Met at yoga class, very positive energy' },
-  { id: 'friend2', name: 'David', group: 'friends', details: 'Gaming buddy, works in finance' },
-  { id: 'friend3', name: 'Emma', group: 'friends', details: 'Book club friend, recommends great reads' },
+  { id: 'bestfriend', name: 'Chris', group: 'friends', details: 'Best friend since university, knows everything', lastContacted: daysAgo(4) },
+  { id: 'friend1', name: 'Julia', group: 'friends', details: 'Met at yoga class, very positive energy', lastContacted: daysAgo(14) },
+  { id: 'friend2', name: 'David', group: 'friends', details: 'Gaming buddy, works in finance', lastContacted: daysAgo(45) },
+  { id: 'friend3', name: 'Emma', group: 'friends', details: 'Book club friend, recommends great reads', lastContacted: daysAgo(60) },
   
   // Acquaintances
-  { id: 'neighbor', name: 'Mr. Schmidt', group: 'acquaintances', details: 'Friendly neighbor, waters plants when away' },
-  { id: 'gym', name: 'Fitness Tom', group: 'acquaintances', details: 'See at the gym, good workout tips' },
+  { id: 'neighbor', name: 'Mr. Schmidt', group: 'acquaintances', details: 'Friendly neighbor, waters plants when away', lastContacted: daysAgo(30) },
+  { id: 'gym', name: 'Fitness Tom', group: 'acquaintances', details: 'See at the gym, good workout tips', lastContacted: daysAgo(120) },
 ];
 
 export const initialLinks = [

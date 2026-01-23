@@ -1,6 +1,37 @@
 import { useState } from 'react';
 import { groupColors, groupLabels } from '../data/initialData';
 
+// Helper function to format relative time
+function formatTimeAgo(dateString) {
+  if (!dateString) return null;
+  
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffMs = now - date;
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  
+  if (diffDays === 0) return 'Today';
+  if (diffDays === 1) return 'Yesterday';
+  if (diffDays < 7) return `${diffDays}d ago`;
+  if (diffDays < 30) return `${Math.floor(diffDays / 7)}w ago`;
+  if (diffDays < 365) return `${Math.floor(diffDays / 30)}mo ago`;
+  return `${Math.floor(diffDays / 365)}y ago`;
+}
+
+// Helper to get urgency level based on last contacted
+function getContactUrgency(dateString) {
+  if (!dateString) return 'never';
+  
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffDays = Math.floor((now - date) / (1000 * 60 * 60 * 24));
+  
+  if (diffDays <= 7) return 'recent';
+  if (diffDays <= 30) return 'moderate';
+  if (diffDays <= 90) return 'overdue';
+  return 'urgent';
+}
+
 export function GroupPanel({ 
   group, 
   nodes, 
@@ -10,7 +41,8 @@ export function GroupPanel({
   onEditPerson,
   onDeletePerson,
   onEditLink,
-  onAddLink
+  onAddLink,
+  onUpdateLastContacted
 }) {
   const [expandedPerson, setExpandedPerson] = useState(null);
   
@@ -95,6 +127,11 @@ export function GroupPanel({
                         {connections.length} connection{connections.length !== 1 ? 's' : ''}
                       </span>
                     </div>
+                    {person.id !== 'me' && (
+                      <span className={`member-last-contact urgency-${getContactUrgency(person.lastContacted)}`}>
+                        {formatTimeAgo(person.lastContacted) || 'Never'}
+                      </span>
+                    )}
                     <svg 
                       className={`expand-icon ${isExpanded ? 'expanded' : ''}`}
                       width="16" 
@@ -173,6 +210,23 @@ export function GroupPanel({
                           </ul>
                         )}
                       </div>
+                      
+                      {person.id !== 'me' && (
+                        <div className="member-last-contacted-section">
+                          <button 
+                            className="btn btn-small btn-contacted"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onUpdateLastContacted(person.id);
+                            }}
+                          >
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <polyline points="20,6 9,17 4,12" />
+                            </svg>
+                            Contacted Today
+                          </button>
+                        </div>
+                      )}
                       
                       <div className="member-actions">
                         <button 

@@ -147,6 +147,13 @@ export function useNetworkData(isAuthenticated) {
     );
   }, []);
 
+  // Update last contacted date for a person
+  const updateLastContacted = useCallback((id, date = new Date().toISOString()) => {
+    setNodes((prev) =>
+      prev.map((node) => (node.id === id ? { ...node, lastContacted: date } : node))
+    );
+  }, []);
+
   // Delete a person and their connections
   const deletePerson = useCallback((id) => {
     if (id === 'me') {
@@ -302,13 +309,9 @@ export function useNetworkData(isAuthenticated) {
     }));
   }, []);
 
-  // Delete a default category (hides it and moves people to 'friends')
+  // Delete a default category (hides it but keeps people in their group)
   const deleteDefaultCategory = useCallback((key) => {
-    // Move all people in this category to 'friends'
-    setNodes(prev => prev.map(node => 
-      node.group === key ? { ...node, group: 'friends' } : node
-    ));
-    // Add to deleted list
+    // Just add to deleted list - don't move people, so restoring brings them back
     setDeletedDefaultCategories(prev => 
       prev.includes(key) ? prev : [...prev, key]
     );
@@ -379,6 +382,7 @@ export function useNetworkData(isAuthenticated) {
     hasPendingChanges: pendingChangesRef.current,
     addPerson,
     updatePerson,
+    updateLastContacted,
     deletePerson,
     addLink,
     updateLink,

@@ -9,6 +9,7 @@ import { GroupPanel } from './components/GroupPanel';
 import { AuthPage } from './components/AuthPage';
 import { CategoryManager } from './components/CategoryManager';
 import { BulkAddForm } from './components/BulkAddForm';
+import { NetworkHealthDashboard } from './components/NetworkHealthDashboard';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { useNetworkData } from './hooks/useNetworkData';
 import './App.css';
@@ -26,6 +27,7 @@ function NetworkApp() {
     lastSaved,
     addPerson,
     updatePerson,
+    updateLastContacted,
     deletePerson,
     addLink,
     updateLink,
@@ -50,6 +52,7 @@ function NetworkApp() {
   const [showAddLink, setShowAddLink] = useState(false);
   const [showBulkAdd, setShowBulkAdd] = useState(false);
   const [showCategoryManager, setShowCategoryManager] = useState(false);
+  const [showHealthDashboard, setShowHealthDashboard] = useState(false);
   const [editingPerson, setEditingPerson] = useState(null);
   const [editingLink, setEditingLink] = useState(null);
   const [preselectedGroup, setPreselectedGroup] = useState(null);
@@ -265,6 +268,17 @@ function NetworkApp() {
             Add Link
           </button>
           <button 
+            className="btn btn-dashboard"
+            onClick={() => setShowHealthDashboard(true)}
+            title="Network health dashboard"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M21.21 15.89A10 10 0 1 1 8 2.83" />
+              <path d="M22 12A10 10 0 0 0 12 2v10z" />
+            </svg>
+            Health
+          </button>
+          <button 
             className="btn btn-ghost"
             onClick={() => setShowCategoryManager(true)}
             title="Manage categories"
@@ -353,6 +367,7 @@ function NetworkApp() {
             onEditLink={handleEditLink}
             onAddLink={handleAddLinkFromPerson}
             customGroups={customGroups}
+            onUpdateLastContacted={updateLastContacted}
           />
         )}
 
@@ -367,6 +382,7 @@ function NetworkApp() {
             onSetAsCenter={handleSetAsCenter}
             centeredNodeId={centeredNodeId}
             customGroups={customGroups}
+            onUpdateLastContacted={updateLastContacted}
           />
         )}
       </main>
@@ -433,6 +449,16 @@ function NetworkApp() {
           defaultColorOverrides={defaultColorOverrides}
           deletedDefaultCategories={deletedDefaultCategories}
           onClose={() => setShowCategoryManager(false)}
+        />
+      )}
+
+      {showHealthDashboard && (
+        <NetworkHealthDashboard
+          nodes={nodes}
+          links={links}
+          customGroups={customGroups}
+          defaultColorOverrides={defaultColorOverrides}
+          onClose={() => setShowHealthDashboard(false)}
         />
       )}
 

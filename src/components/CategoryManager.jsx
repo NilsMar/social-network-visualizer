@@ -124,7 +124,7 @@ export function CategoryManager({
   // Delete
   const handleDelete = (cat) => {
     const message = cat.isDefault 
-      ? `Delete "${cat.label}"? This will reset it to default settings.`
+      ? `Hide "${cat.label}"? You can restore it later.`
       : `Delete "${cat.label}"? People in this category will be moved to "Friends".`;
     
     if (window.confirm(message)) {

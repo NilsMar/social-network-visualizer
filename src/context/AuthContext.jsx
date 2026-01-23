@@ -55,6 +55,28 @@ export function AuthProvider({ children }) {
     setUser(null);
   }, []);
 
+  const forgotPassword = useCallback(async (email) => {
+    setError(null);
+    try {
+      const data = await apiClient.forgotPassword(email);
+      return data;
+    } catch (err) {
+      setError(err.message);
+      throw err;
+    }
+  }, []);
+
+  const resetPassword = useCallback(async (token, password) => {
+    setError(null);
+    try {
+      const data = await apiClient.resetPassword(token, password);
+      return data;
+    } catch (err) {
+      setError(err.message);
+      throw err;
+    }
+  }, []);
+
   const clearError = useCallback(() => {
     setError(null);
   }, []);
@@ -67,6 +89,8 @@ export function AuthProvider({ children }) {
     login,
     register,
     logout,
+    forgotPassword,
+    resetPassword,
     clearError,
   };
 

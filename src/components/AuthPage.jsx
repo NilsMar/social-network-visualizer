@@ -1,34 +1,100 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 
 export function AuthPage() {
-  const [isLogin, setIsLogin] = useState(true);
+  // View modes: 'login', 'register', 'forgot', 'reset'
+  const [view, setView] = useState('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [name, setName] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [localError, setLocalError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
+  const [resetToken, setResetToken] = useState('');
   
-  const { login, register, error, clearError } = useAuth();
+  const { login, register, forgotPassword, resetPassword, error, clearError } = useAuth();
+
+  // Check for reset token in URL on mount
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('reset');
+    if (token) {
+      setResetToken(token);
+      setView('reset');
+      // Clean up URL
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLocalError('');
+    setSuccessMessage('');
     clearError();
+
+    if (view === 'forgot') {
+      if (!email) {
+        setLocalError('Please enter your email address');
+        return;
+      }
+      setIsSubmitting(true);
+      try {
+        await forgotPassword(email);
+        setSuccessMessage('If an account with that email exists, a password reset link has been sent. Check your email or console (in development).');
+        setEmail('');
+      } catch (err) {
+        // Error is handled by context
+      } finally {
+        setIsSubmitting(false);
+      }
+      return;
+    }
+
+    if (view === 'reset') {
+      if (!password) {
+        setLocalError('Please enter a new password');
+        return;
+      }
+      if (password.length < 6) {
+        setLocalError('Password must be at least 6 characters');
+        return;
+      }
+      if (password !== confirmPassword) {
+        setLocalError('Passwords do not match');
+        return;
+      }
+      setIsSubmitting(true);
+      try {
+        await resetPassword(resetToken, password);
+        setSuccessMessage('Password has been reset successfully! You can now sign in.');
+        setPassword('');
+        setConfirmPassword('');
+        setTimeout(() => {
+          setView('login');
+          setSuccessMessage('');
+        }, 2000);
+      } catch (err) {
+        // Error is handled by context
+      } finally {
+        setIsSubmitting(false);
+      }
+      return;
+    }
     
     if (!email || !password) {
       setLocalError('Please fill in all required fields');
       return;
     }
 
-    if (!isLogin && password.length < 6) {
+    if (view === 'register' && password.length < 6) {
       setLocalError('Password must be at least 6 characters');
       return;
     }
 
     setIsSubmitting(true);
     try {
-      if (isLogin) {
+      if (view === 'login') {
         await login(email, password);
       } else {
         await register(email, password, name);
@@ -40,9 +106,10 @@ export function AuthPage() {
     }
   };
 
-  const toggleMode = () => {
-    setIsLogin(!isLogin);
+  const switchView = (newView) => {
+    setView(newView);
     setLocalError('');
+    setSuccessMessage('');
     clearError();
   };
 
@@ -75,25 +142,41 @@ export function AuthPage() {
         </div>
 
         <div className="auth-card">
-          <div className="auth-tabs">
-            <button 
-              className={`auth-tab ${isLogin ? 'active' : ''}`}
-              onClick={() => toggleMode()}
-              type="button"
-            >
-              Sign In
-            </button>
-            <button 
-              className={`auth-tab ${!isLogin ? 'active' : ''}`}
-              onClick={() => toggleMode()}
-              type="button"
-            >
-              Create Account
-            </button>
-          </div>
+          {(view === 'login' || view === 'register') && (
+            <div className="auth-tabs">
+              <button 
+                className={`auth-tab ${view === 'login' ? 'active' : ''}`}
+                onClick={() => switchView('login')}
+                type="button"
+              >
+                Sign In
+              </button>
+              <button 
+                className={`auth-tab ${view === 'register' ? 'active' : ''}`}
+                onClick={() => switchView('register')}
+                type="button"
+              >
+                Create Account
+              </button>
+            </div>
+          )}
+
+          {view === 'forgot' && (
+            <div className="auth-header-inline">
+              <h2>Reset Password</h2>
+              <p>Enter your email and we'll send you a reset link</p>
+            </div>
+          )}
+
+          {view === 'reset' && (
+            <div className="auth-header-inline">
+              <h2>Set New Password</h2>
+              <p>Enter your new password below</p>
+            </div>
+          )}
 
           <form onSubmit={handleSubmit} className="auth-form">
-            {!isLogin && (
+            {view === 'register' && (
               <div className="form-group">
                 <label htmlFor="name">Your Name</label>
                 <input
@@ -107,31 +190,72 @@ export function AuthPage() {
               </div>
             )}
 
-            <div className="form-group">
-              <label htmlFor="email">Email Address</label>
-              <input
-                type="email"
-                id="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
-                required
-                autoComplete="email"
-              />
-            </div>
+            {(view === 'login' || view === 'register' || view === 'forgot') && (
+              <div className="form-group">
+                <label htmlFor="email">Email Address</label>
+                <input
+                  type="email"
+                  id="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  required
+                  autoComplete="email"
+                />
+              </div>
+            )}
 
-            <div className="form-group">
-              <label htmlFor="password">Password</label>
-              <input
-                type="password"
-                id="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder={isLogin ? 'Enter your password' : 'At least 6 characters'}
-                required
-                autoComplete={isLogin ? 'current-password' : 'new-password'}
-              />
-            </div>
+            {(view === 'login' || view === 'register' || view === 'reset') && (
+              <div className="form-group">
+                <label htmlFor="password">{view === 'reset' ? 'New Password' : 'Password'}</label>
+                <input
+                  type="password"
+                  id="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder={view === 'login' ? 'Enter your password' : 'At least 6 characters'}
+                  required
+                  autoComplete={view === 'login' ? 'current-password' : 'new-password'}
+                />
+              </div>
+            )}
+
+            {view === 'reset' && (
+              <div className="form-group">
+                <label htmlFor="confirmPassword">Confirm Password</label>
+                <input
+                  type="password"
+                  id="confirmPassword"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Re-enter your new password"
+                  required
+                  autoComplete="new-password"
+                />
+              </div>
+            )}
+
+            {view === 'login' && (
+              <div className="form-group-inline">
+                <button 
+                  type="button" 
+                  className="link-btn forgot-link"
+                  onClick={() => switchView('forgot')}
+                >
+                  Forgot password?
+                </button>
+              </div>
+            )}
+
+            {successMessage && (
+              <div className="auth-success">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                  <polyline points="22 4 12 14.01 9 11.01" />
+                </svg>
+                {successMessage}
+              </div>
+            )}
 
             {displayError && (
               <div className="auth-error">
@@ -152,21 +276,38 @@ export function AuthPage() {
               {isSubmitting ? (
                 <span className="btn-loading">
                   <span className="spinner-small" />
-                  {isLogin ? 'Signing in...' : 'Creating account...'}
+                  {view === 'login' && 'Signing in...'}
+                  {view === 'register' && 'Creating account...'}
+                  {view === 'forgot' && 'Sending...'}
+                  {view === 'reset' && 'Resetting...'}
                 </span>
               ) : (
-                isLogin ? 'Sign In' : 'Create Account'
+                <>
+                  {view === 'login' && 'Sign In'}
+                  {view === 'register' && 'Create Account'}
+                  {view === 'forgot' && 'Send Reset Link'}
+                  {view === 'reset' && 'Reset Password'}
+                </>
               )}
             </button>
           </form>
 
           <div className="auth-footer">
-            <p>
-              {isLogin ? "Don't have an account? " : "Already have an account? "}
-              <button type="button" className="link-btn" onClick={toggleMode}>
-                {isLogin ? 'Create one' : 'Sign in'}
-              </button>
-            </p>
+            {(view === 'login' || view === 'register') && (
+              <p>
+                {view === 'login' ? "Don't have an account? " : "Already have an account? "}
+                <button type="button" className="link-btn" onClick={() => switchView(view === 'login' ? 'register' : 'login')}>
+                  {view === 'login' ? 'Create one' : 'Sign in'}
+                </button>
+              </p>
+            )}
+            {(view === 'forgot' || view === 'reset') && (
+              <p>
+                <button type="button" className="link-btn" onClick={() => switchView('login')}>
+                  ← Back to Sign In
+                </button>
+              </p>
+            )}
           </div>
         </div>
 

@@ -3,10 +3,14 @@ import express from 'express';
 import cors from 'cors';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 import { createClient } from '@supabase/supabase-js';
 
 const app = express();
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
+const APP_URL = process.env.APP_URL || 'http://localhost:5173';
+const RESEND_API_KEY = process.env.RESEND_API_KEY;
+const FROM_EMAIL = process.env.FROM_EMAIL || 'noreply@example.com';
 
 // Supabase client setup
 const supabaseUrl = process.env.SUPABASE_URL;
@@ -25,6 +29,7 @@ if (supabaseUrl && supabaseServiceKey) {
 let memoryStore = {
   users: [],
   networkData: [],
+  passwordResetTokens: [],
   nextUserId: 1,
   nextNetworkId: 1,
 };
@@ -206,6 +211,130 @@ async function saveNetworkData(userId, nodes, links, customGroups = {}, defaultC
   }
 }
 
+// Password reset helper functions
+async function createPasswordResetToken(userId, email) {
+  const token = crypto.randomBytes(32).toString('hex');
+  const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour from now
+  
+  if (supabase) {
+    // Delete any existing tokens for this user
+    await supabase
+      .from('password_reset_tokens')
+      .delete()
+      .eq('user_id', userId);
+    
+    const { error } = await supabase
+      .from('password_reset_tokens')
+      .insert({ user_id: userId, email, token, expires_at: expiresAt.toISOString() });
+    
+    if (error) {
+      console.error('Error creating reset token:', error);
+      throw new Error(error.message);
+    }
+  } else {
+    // Remove existing tokens for this user
+    memoryStore.passwordResetTokens = memoryStore.passwordResetTokens.filter(t => t.user_id !== userId);
+    memoryStore.passwordResetTokens.push({
+      user_id: userId,
+      email,
+      token,
+      expires_at: expiresAt.toISOString(),
+    });
+  }
+  
+  return token;
+}
+
+async function findPasswordResetToken(token) {
+  if (supabase) {
+    const { data, error } = await supabase
+      .from('password_reset_tokens')
+      .select('*')
+      .eq('token', token)
+      .single();
+    
+    if (error && error.code !== 'PGRST116') {
+      console.error('Error finding reset token:', error);
+    }
+    return data;
+  }
+  return memoryStore.passwordResetTokens.find(t => t.token === token);
+}
+
+async function deletePasswordResetToken(token) {
+  if (supabase) {
+    await supabase
+      .from('password_reset_tokens')
+      .delete()
+      .eq('token', token);
+  } else {
+    memoryStore.passwordResetTokens = memoryStore.passwordResetTokens.filter(t => t.token !== token);
+  }
+}
+
+async function updateUserPassword(userId, hashedPassword) {
+  if (supabase) {
+    const { error } = await supabase
+      .from('users')
+      .update({ password: hashedPassword })
+      .eq('id', userId);
+    
+    if (error) {
+      console.error('Error updating password:', error);
+      throw new Error(error.message);
+    }
+  } else {
+    const user = memoryStore.users.find(u => u.id === userId);
+    if (user) {
+      user.password = hashedPassword;
+    }
+  }
+}
+
+// Email sending helper
+async function sendPasswordResetEmail(email, resetUrl) {
+  if (RESEND_API_KEY) {
+    try {
+      const response = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${RESEND_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from: FROM_EMAIL,
+          to: email,
+          subject: 'Reset your password - Social Network',
+          html: `
+            <h2>Password Reset Request</h2>
+            <p>You requested to reset your password. Click the link below to set a new password:</p>
+            <p><a href="${resetUrl}" style="display: inline-block; padding: 12px 24px; background-color: #7c6bb8; color: white; text-decoration: none; border-radius: 6px;">Reset Password</a></p>
+            <p>This link will expire in 1 hour.</p>
+            <p>If you didn't request this, you can safely ignore this email.</p>
+          `,
+        }),
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        console.error('Resend API error:', error);
+        return false;
+      }
+      return true;
+    } catch (err) {
+      console.error('Error sending email:', err);
+      return false;
+    }
+  }
+  
+  // Fallback: log to console in development
+  console.log('\n========================================');
+  console.log('PASSWORD RESET LINK (email not configured):');
+  console.log(resetUrl);
+  console.log('========================================\n');
+  return true;
+}
+
 // Routes
 
 // Health check
@@ -279,6 +408,73 @@ app.post('/api/auth/login', async (req, res) => {
   } catch (error) {
     console.error('Login error:', error.message);
     res.status(500).json({ error: 'Server error during login' });
+  }
+});
+
+// Request password reset
+app.post('/api/auth/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required' });
+    }
+
+    const user = await findUserByEmail(email);
+    
+    // Always return success to prevent email enumeration attacks
+    if (!user) {
+      return res.json({ message: 'If an account with that email exists, a password reset link has been sent.' });
+    }
+
+    const token = await createPasswordResetToken(user.id, email);
+    const resetUrl = `${APP_URL}?reset=${token}`;
+    
+    await sendPasswordResetEmail(email, resetUrl);
+
+    res.json({ message: 'If an account with that email exists, a password reset link has been sent.' });
+  } catch (error) {
+    console.error('Forgot password error:', error.message);
+    res.status(500).json({ error: 'Server error processing password reset request' });
+  }
+});
+
+// Reset password with token
+app.post('/api/auth/reset-password', async (req, res) => {
+  try {
+    const { token, password } = req.body;
+
+    if (!token || !password) {
+      return res.status(400).json({ error: 'Token and new password are required' });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    }
+
+    const resetToken = await findPasswordResetToken(token);
+    
+    if (!resetToken) {
+      return res.status(400).json({ error: 'Invalid or expired reset link' });
+    }
+
+    // Check if token is expired
+    if (new Date(resetToken.expires_at) < new Date()) {
+      await deletePasswordResetToken(token);
+      return res.status(400).json({ error: 'Reset link has expired. Please request a new one.' });
+    }
+
+    // Hash the new password and update
+    const hashedPassword = await bcrypt.hash(password, 10);
+    await updateUserPassword(resetToken.user_id, hashedPassword);
+    
+    // Delete the used token
+    await deletePasswordResetToken(token);
+
+    res.json({ message: 'Password has been reset successfully. You can now sign in with your new password.' });
+  } catch (error) {
+    console.error('Reset password error:', error.message);
+    res.status(500).json({ error: 'Server error resetting password' });
   }
 });
 

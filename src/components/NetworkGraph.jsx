@@ -2,7 +2,7 @@ import { useEffect, useRef, useCallback, useMemo } from 'react';
 import * as d3 from 'd3';
 import { defaultGroupColors } from '../data/initialData';
 
-export function NetworkGraph({ nodes, links, selectedNode, onNodeSelect, customGroups = {}, defaultColorOverrides = {}, centeredNodeId = 'me' }) {
+export function NetworkGraph({ nodes, links, selectedNode, onNodeSelect, customGroups = {}, defaultColorOverrides = {}, centeredNodeId = 'me', shouldAnimate = false, onAnimationComplete }) {
   // Merge default and custom group colors
   const groupColors = useMemo(() => ({
     ...defaultGroupColors,
@@ -15,6 +15,50 @@ export function NetworkGraph({ nodes, links, selectedNode, onNodeSelect, customG
   const simulationRef = useRef(null);
   const containerRef = useRef(null);
   const previousNodesRef = useRef(new Map()); // Store previous node positions
+  const hasAnimatedRef = useRef(false); // Track if initial animation has played
+
+  // Calculate distance (in hops) from the center node for each node
+  const nodeDistances = useMemo(() => {
+    const distances = new Map();
+    distances.set(centeredNodeId, 0);
+    
+    // BFS to find shortest path to each node from center
+    const queue = [centeredNodeId];
+    const visited = new Set([centeredNodeId]);
+    
+    while (queue.length > 0) {
+      const currentId = queue.shift();
+      const currentDist = distances.get(currentId);
+      
+      // Find all neighbors
+      links.forEach(link => {
+        const sourceId = link.source?.id || link.source;
+        const targetId = link.target?.id || link.target;
+        
+        let neighborId = null;
+        if (sourceId === currentId && !visited.has(targetId)) {
+          neighborId = targetId;
+        } else if (targetId === currentId && !visited.has(sourceId)) {
+          neighborId = sourceId;
+        }
+        
+        if (neighborId) {
+          visited.add(neighborId);
+          distances.set(neighborId, currentDist + 1);
+          queue.push(neighborId);
+        }
+      });
+    }
+    
+    // Nodes not connected get a large distance
+    nodes.forEach(node => {
+      if (!distances.has(node.id)) {
+        distances.set(node.id, 999);
+      }
+    });
+    
+    return distances;
+  }, [nodes, links, centeredNodeId]);
 
   // Calculate bridge nodes and their connected groups
   const bridgeData = useMemo(() => {
@@ -303,6 +347,14 @@ export function NetworkGraph({ nodes, links, selectedNode, onNodeSelect, customG
       }
     });
 
+    // Animation configuration
+    const animationDuration = 600; // ms per distance level
+    const animationDelay = 300; // delay between distance levels
+    const isAnimating = shouldAnimate && !hasAnimatedRef.current;
+    
+    // Calculate max distance for animation timing
+    const maxDistance = Math.max(...Array.from(nodeDistances.values()).filter(d => d < 999));
+
     // Create links with curved paths for cross-group connections
     const link = g.append('g')
       .attr('class', 'links')
@@ -311,7 +363,7 @@ export function NetworkGraph({ nodes, links, selectedNode, onNodeSelect, customG
       .join('path')
       .attr('fill', 'none')
       .attr('stroke', '#94a3b8')
-      .attr('stroke-opacity', d => 0.5 + (d.strength / 20))
+      .attr('stroke-opacity', isAnimating ? 0 : d => 0.5 + (d.strength / 20))
       .attr('stroke-width', d => Math.max(1.5, d.strength / 2.5))
       .attr('stroke-linecap', 'round');
 
@@ -322,6 +374,10 @@ export function NetworkGraph({ nodes, links, selectedNode, onNodeSelect, customG
       .data(nodesCopy)
       .join('g')
       .attr('cursor', 'pointer')
+      .attr('opacity', d => {
+        if (!isAnimating) return 1;
+        return d.id === centeredNodeId ? 1 : 0;
+      })
       .call(d3.drag()
         .on('start', (event, d) => {
           if (!event.active) simulation.alphaTarget(0.3).restart();
@@ -526,12 +582,112 @@ export function NetworkGraph({ nodes, links, selectedNode, onNodeSelect, customG
     // Reheat simulation to ensure proper clustering
     simulation.alpha(0.8).restart();
 
+    // Animate nodes appearing from center if shouldAnimate is true
+    if (isAnimating) {
+      hasAnimatedRef.current = true;
+      
+      // Initial delay for center node animation
+      const centerAnimationDuration = 400;
+      const expandStartDelay = centerAnimationDuration + 100;
+      
+      // Calculate total animation time for callback
+      const totalAnimationTime = expandStartDelay + (maxDistance + 1) * animationDelay + animationDuration;
+      
+      // Start center node small and pulse in
+      const centerNode = node.filter(d => d.id === centeredNodeId);
+      centerNode.selectAll('.node-circle')
+        .attr('transform', 'scale(0.3)')
+        .transition()
+        .duration(centerAnimationDuration)
+        .ease(d3.easeBackOut.overshoot(1.5))
+        .attr('transform', 'scale(1)');
+      
+      // Also scale the circles for a nicer pop-in effect
+      node.filter(d => d.id !== centeredNodeId)
+        .selectAll('.node-circle')
+        .attr('transform', 'scale(0)');
+      
+      node.filter(d => d.id !== centeredNodeId)
+        .selectAll('.bridge-ring')
+        .attr('transform', 'scale(0)');
+      
+      // Animate nodes appearing based on distance from center
+      for (let dist = 1; dist <= maxDistance; dist++) {
+        const delay = expandStartDelay + (dist - 1) * animationDelay;
+        
+        // Animate nodes at this distance - fade in and scale up
+        const nodesAtDist = node.filter(d => nodeDistances.get(d.id) === dist);
+        
+        nodesAtDist
+          .transition()
+          .delay(delay)
+          .duration(animationDuration)
+          .ease(d3.easeBackOut.overshoot(1.2))
+          .attr('opacity', 1);
+        
+        nodesAtDist.selectAll('.node-circle')
+          .transition()
+          .delay(delay)
+          .duration(animationDuration)
+          .ease(d3.easeBackOut.overshoot(1.2))
+          .attr('transform', 'scale(1)');
+        
+        nodesAtDist.selectAll('.bridge-ring')
+          .transition()
+          .delay(delay)
+          .duration(animationDuration)
+          .ease(d3.easeBackOut.overshoot(1.2))
+          .attr('transform', 'scale(1)');
+      }
+      
+      // Animate disconnected nodes last
+      const disconnectedDelay = expandStartDelay + maxDistance * animationDelay;
+      const disconnectedNodes = node.filter(d => nodeDistances.get(d.id) === 999);
+      
+      disconnectedNodes
+        .transition()
+        .delay(disconnectedDelay)
+        .duration(animationDuration)
+        .ease(d3.easeBackOut.overshoot(1.2))
+        .attr('opacity', 1);
+      
+      disconnectedNodes.selectAll('.node-circle')
+        .transition()
+        .delay(disconnectedDelay)
+        .duration(animationDuration)
+        .ease(d3.easeBackOut.overshoot(1.2))
+        .attr('transform', 'scale(1)');
+      
+      // Animate links appearing when both endpoints are visible
+      link.each(function(d) {
+        const sourceId = d.source?.id || d.source;
+        const targetId = d.target?.id || d.target;
+        const sourceDist = nodeDistances.get(sourceId) || 0;
+        const targetDist = nodeDistances.get(targetId) || 0;
+        const linkDist = Math.max(sourceDist, targetDist);
+        // Links appear slightly after their furthest node starts appearing
+        const linkDelay = expandStartDelay + (linkDist - 1) * animationDelay + animationDuration * 0.3;
+        
+        d3.select(this)
+          .transition()
+          .delay(Math.max(0, linkDelay))
+          .duration(animationDuration * 0.7)
+          .ease(d3.easeQuadOut)
+          .attr('stroke-opacity', 0.5 + (d.strength / 20));
+      });
+      
+      // Call onAnimationComplete after all animations finish
+      if (onAnimationComplete) {
+        setTimeout(onAnimationComplete, totalAnimationTime);
+      }
+    }
+
     // Cleanup
     return () => {
       simulation.stop();
       tooltip.remove();
     };
-  }, [nodes, links, getNodeSize, onNodeSelect, bridgeData, getInitialPosition, centeredNodeId]);
+  }, [nodes, links, getNodeSize, onNodeSelect, bridgeData, getInitialPosition, centeredNodeId, shouldAnimate, nodeDistances, onAnimationComplete]);
 
   // Update selected node styling and highlight connected links
   useEffect(() => {

@@ -724,11 +724,14 @@ export function NetworkGraph({ nodes, links, selectedNode, onNodeSelect, customG
       return contactPathLinks.has(linkKey);
     };
     
+    // Get the target's group color for contact path highlighting
+    const pathColor = selectedNode ? groupColors[selectedNode.group] : '#94a3b8';
+    
     // Update node circles
     svg.selectAll('.node-circle')
       .attr('stroke', d => {
         if (d.id === selectedNode?.id) return '#1e293b';
-        if (contactPathConnectors.has(d.id)) return '#f59e0b'; // Golden highlight for connectors
+        if (contactPathConnectors.has(d.id)) return pathColor; // Use target's group color
         return 'rgba(255,255,255,0.8)';
       })
       .attr('stroke-width', d => {
@@ -737,18 +740,20 @@ export function NetworkGraph({ nodes, links, selectedNode, onNodeSelect, customG
         return d.id === centeredNodeId ? 3 : 2;
       });
     
-    // Update bridge rings - show only when node is in contact path
+    // Update bridge rings - show only when node is in contact path, use target's color
     svg.selectAll('.bridge-ring')
       .transition()
       .duration(300)
       .attr('opacity', d => contactPathConnectors.has(d.id) ? 0.9 : 0)
-      .attr('stroke-width', d => contactPathConnectors.has(d.id) ? 3.5 : 2.5);
+      .attr('stroke-width', d => contactPathConnectors.has(d.id) ? 3.5 : 2.5)
+      .attr('stroke', d => contactPathConnectors.has(d.id) ? pathColor : d3.select(d3.select(`#bridge-gradient-${d.id}`).node()?.parentNode).select(`#bridge-gradient-${d.id}`).attr('href') || pathColor);
     
     // Update bridge labels - show only when node is in contact path
     svg.selectAll('.bridge-label')
       .transition()
       .duration(300)
-      .attr('opacity', d => contactPathConnectors.has(d.id) ? 1 : 0);
+      .attr('opacity', d => contactPathConnectors.has(d.id) ? 1 : 0)
+      .attr('fill', pathColor);
     
     // Update links - highlight contact path and connections to selected node
     svg.selectAll('.links path')
@@ -757,7 +762,7 @@ export function NetworkGraph({ nodes, links, selectedNode, onNodeSelect, customG
         
         // Check if this link is part of the contact path
         if (isLinkInContactPath(d)) {
-          return '#f59e0b'; // Golden color for contact path
+          return pathColor; // Use target's group color for contact path
         }
         
         const sourceId = d.source?.id || d.source;
@@ -799,12 +804,21 @@ export function NetworkGraph({ nodes, links, selectedNode, onNodeSelect, customG
       });
   }, [selectedNode, contactPathConnectors, contactPathLinks, groupColors, centeredNodeId]);
 
+  // Get the color for contact path legend
+  const contactPathColor = selectedNode && contactPath ? groupColors[selectedNode.group] : null;
+
   return (
     <div ref={containerRef} className="network-graph-container">
       <svg ref={svgRef} />
-      {contactPath && contactPath.length > 2 && (
-        <div className="bridge-legend contact-path-active">
-          <span className="bridge-icon pulsing">⬡</span>
+      {contactPath && contactPath.length > 2 && selectedNode && (
+        <div 
+          className="bridge-legend contact-path-active"
+          style={{ 
+            borderColor: contactPathColor,
+            background: `linear-gradient(135deg, ${contactPathColor}20, ${contactPathColor}10)`
+          }}
+        >
+          <span className="bridge-icon pulsing" style={{ color: contactPathColor }}>⬡</span>
           <span>Contact path via {contactPath.slice(1, -1).map(id => {
             const node = nodes.find(n => n.id === id);
             return node?.name || id;

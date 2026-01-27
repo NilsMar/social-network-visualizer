@@ -16,7 +16,86 @@ export function NetworkGraph({ nodes, links, selectedNode, onNodeSelect, customG
   const containerRef = useRef(null);
   const previousNodesRef = useRef(new Map()); // Store previous node positions
 
-  // Calculate bridge nodes and their connected groups
+  // Check if "me" is directly connected to a node
+  const isDirectlyConnectedToMe = useCallback((nodeId) => {
+    if (nodeId === 'me') return true;
+    return links.some(link => {
+      const sourceId = link.source?.id || link.source;
+      const targetId = link.target?.id || link.target;
+      return (sourceId === 'me' && targetId === nodeId) || (targetId === 'me' && sourceId === nodeId);
+    });
+  }, [links]);
+
+  // Find shortest path from 'me' to a target node using BFS
+  const findContactPath = useCallback((targetId) => {
+    if (targetId === 'me' || isDirectlyConnectedToMe(targetId)) {
+      return null; // No path needed if directly connected or is 'me'
+    }
+
+    // Build adjacency list
+    const adjacency = new Map();
+    nodes.forEach(n => adjacency.set(n.id, []));
+    links.forEach(link => {
+      const sourceId = link.source?.id || link.source;
+      const targetId = link.target?.id || link.target;
+      if (adjacency.has(sourceId) && adjacency.has(targetId)) {
+        adjacency.get(sourceId).push(targetId);
+        adjacency.get(targetId).push(sourceId);
+      }
+    });
+
+    // BFS to find shortest path
+    const queue = [['me']];
+    const visited = new Set(['me']);
+
+    while (queue.length > 0) {
+      const path = queue.shift();
+      const currentNode = path[path.length - 1];
+
+      if (currentNode === targetId) {
+        return path; // Found the shortest path
+      }
+
+      const neighbors = adjacency.get(currentNode) || [];
+      for (const neighbor of neighbors) {
+        if (!visited.has(neighbor)) {
+          visited.add(neighbor);
+          queue.push([...path, neighbor]);
+        }
+      }
+    }
+
+    return null; // No path found
+  }, [nodes, links, isDirectlyConnectedToMe]);
+
+  // Calculate the contact path for the selected node
+  const contactPath = useMemo(() => {
+    if (!selectedNode || selectedNode.id === 'me') return null;
+    return findContactPath(selectedNode.id);
+  }, [selectedNode, findContactPath]);
+
+  // Get connector nodes (nodes between 'me' and target in the contact path)
+  const contactPathConnectors = useMemo(() => {
+    if (!contactPath || contactPath.length <= 2) return new Set();
+    // Connectors are all nodes in the path except 'me' (first) and target (last)
+    return new Set(contactPath.slice(1, -1));
+  }, [contactPath]);
+
+  // Get links that are part of the contact path
+  const contactPathLinks = useMemo(() => {
+    if (!contactPath || contactPath.length < 2) return new Set();
+    const pathLinks = new Set();
+    for (let i = 0; i < contactPath.length - 1; i++) {
+      const from = contactPath[i];
+      const to = contactPath[i + 1];
+      // Store as a sorted pair to match regardless of direction
+      const linkKey = [from, to].sort().join('-');
+      pathLinks.add(linkKey);
+    }
+    return pathLinks;
+  }, [contactPath]);
+
+  // Calculate bridge nodes and their connected groups (for static display/legend only)
   const bridgeData = useMemo(() => {
     const bridges = new Map(); // nodeId -> Set of connected group names (excluding own group)
     
@@ -377,7 +456,7 @@ export function NetworkGraph({ nodes, links, selectedNode, onNodeSelect, customG
         })
       );
 
-    // Add outer ring for bridge nodes with group-specific colors
+    // Add outer ring for bridge nodes (hidden by default, shown when in contact path)
     node.filter(d => bridgeData.has(d.id))
       .append('circle')
       .attr('class', 'bridge-ring')
@@ -386,7 +465,7 @@ export function NetworkGraph({ nodes, links, selectedNode, onNodeSelect, customG
       .attr('stroke', d => `url(#bridge-gradient-${d.id})`)
       .attr('stroke-width', 2.5)
       .attr('stroke-dasharray', '6,4')
-      .attr('opacity', 0.9);
+      .attr('opacity', 0); // Hidden by default - shown when in contact path
 
     // Add main circles to nodes
     node.append('circle')
@@ -456,7 +535,7 @@ export function NetworkGraph({ nodes, links, selectedNode, onNodeSelect, customG
       .attr('font-weight', d => d.id === centeredNodeId ? '600' : '500')
       .attr('pointer-events', 'none');
 
-    // Add bridge indicator label
+    // Add bridge indicator label (hidden by default, shown when in contact path)
     node.filter(d => bridgeData.has(d.id))
       .append('text')
       .attr('class', 'bridge-label')
@@ -471,7 +550,8 @@ export function NetworkGraph({ nodes, links, selectedNode, onNodeSelect, customG
         }
         return '#64748b';
       })
-      .attr('pointer-events', 'none');
+      .attr('pointer-events', 'none')
+      .attr('opacity', 0); // Hidden by default - shown when in contact path
 
     // Add tooltip
     const tooltip = d3.select('body').append('div')
@@ -630,24 +710,56 @@ export function NetworkGraph({ nodes, links, selectedNode, onNodeSelect, customG
     };
   }, [nodes, links, getNodeSize, onNodeSelect, bridgeData, getInitialPosition, centeredNodeId]);
 
-  // Update selected node styling and highlight connected links
+  // Update selected node styling, contact path highlighting, and bridge halos
   useEffect(() => {
     if (!svgRef.current) return;
     
     const svg = d3.select(svgRef.current);
     
+    // Helper to check if a link is part of the contact path
+    const isLinkInContactPath = (d) => {
+      const sourceId = d.source?.id || d.source;
+      const targetId = d.target?.id || d.target;
+      const linkKey = [sourceId, targetId].sort().join('-');
+      return contactPathLinks.has(linkKey);
+    };
+    
     // Update node circles
     svg.selectAll('.node-circle')
-      .attr('stroke', d => d.id === selectedNode?.id ? '#1e293b' : 'rgba(255,255,255,0.8)')
+      .attr('stroke', d => {
+        if (d.id === selectedNode?.id) return '#1e293b';
+        if (contactPathConnectors.has(d.id)) return '#f59e0b'; // Golden highlight for connectors
+        return 'rgba(255,255,255,0.8)';
+      })
       .attr('stroke-width', d => {
         if (d.id === selectedNode?.id) return 4;
+        if (contactPathConnectors.has(d.id)) return 3;
         return d.id === centeredNodeId ? 3 : 2;
       });
     
-    // Update links - highlight connections to selected node
+    // Update bridge rings - show only when node is in contact path
+    svg.selectAll('.bridge-ring')
+      .transition()
+      .duration(300)
+      .attr('opacity', d => contactPathConnectors.has(d.id) ? 0.9 : 0)
+      .attr('stroke-width', d => contactPathConnectors.has(d.id) ? 3.5 : 2.5);
+    
+    // Update bridge labels - show only when node is in contact path
+    svg.selectAll('.bridge-label')
+      .transition()
+      .duration(300)
+      .attr('opacity', d => contactPathConnectors.has(d.id) ? 1 : 0);
+    
+    // Update links - highlight contact path and connections to selected node
     svg.selectAll('.links path')
       .attr('stroke', d => {
         if (!selectedNode) return '#94a3b8';
+        
+        // Check if this link is part of the contact path
+        if (isLinkInContactPath(d)) {
+          return '#f59e0b'; // Golden color for contact path
+        }
+        
         const sourceId = d.source?.id || d.source;
         const targetId = d.target?.id || d.target;
         if (sourceId === selectedNode.id || targetId === selectedNode.id) {
@@ -657,15 +769,27 @@ export function NetworkGraph({ nodes, links, selectedNode, onNodeSelect, customG
       })
       .attr('stroke-opacity', d => {
         if (!selectedNode) return 0.5 + (d.strength / 20);
+        
+        // Contact path links are fully visible
+        if (isLinkInContactPath(d)) {
+          return 1;
+        }
+        
         const sourceId = d.source?.id || d.source;
         const targetId = d.target?.id || d.target;
         if (sourceId === selectedNode.id || targetId === selectedNode.id) {
           return 0.9;
         }
-        return 0.2;
+        return 0.15; // Dim non-path links more
       })
       .attr('stroke-width', d => {
         if (!selectedNode) return Math.max(1.5, d.strength / 2.5);
+        
+        // Contact path links are thicker
+        if (isLinkInContactPath(d)) {
+          return 4;
+        }
+        
         const sourceId = d.source?.id || d.source;
         const targetId = d.target?.id || d.target;
         if (sourceId === selectedNode.id || targetId === selectedNode.id) {
@@ -673,12 +797,21 @@ export function NetworkGraph({ nodes, links, selectedNode, onNodeSelect, customG
         }
         return Math.max(1, d.strength / 3);
       });
-  }, [selectedNode]);
+  }, [selectedNode, contactPathConnectors, contactPathLinks, groupColors, centeredNodeId]);
 
   return (
     <div ref={containerRef} className="network-graph-container">
       <svg ref={svgRef} />
-      {bridgeData.size > 0 && (
+      {contactPath && contactPath.length > 2 && (
+        <div className="bridge-legend contact-path-active">
+          <span className="bridge-icon pulsing">⬡</span>
+          <span>Contact path via {contactPath.slice(1, -1).map(id => {
+            const node = nodes.find(n => n.id === id);
+            return node?.name || id;
+          }).join(', ')}</span>
+        </div>
+      )}
+      {!contactPath && bridgeData.size > 0 && (
         <div className="bridge-legend">
           <span className="bridge-icon">⬡</span>
           <span>Bridge connector</span>

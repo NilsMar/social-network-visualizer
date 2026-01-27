@@ -279,11 +279,40 @@ body {
   font-size: 0.75rem;
   color: var(--text-muted);
   box-shadow: var(--shadow-sm);
+  transition: all var(--transition-normal);
+}
+
+.bridge-legend.contact-path-active {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(251, 191, 36, 0.1));
+  border-color: rgba(245, 158, 11, 0.4);
+  color: #b45309;
+  padding: 0.6rem 1rem;
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.2);
+  animation: fadeIn 0.3s ease;
 }
 
 .bridge-icon {
   color: var(--accent-primary);
   font-size: 0.9rem;
+}
+
+.bridge-legend.contact-path-active .bridge-icon {
+  color: #f59e0b;
+}
+
+.bridge-icon.pulsing {
+  animation: iconPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes iconPulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 0.8;
+  }
 }
 
 /* Node styling animations */
